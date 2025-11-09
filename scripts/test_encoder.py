@@ -2,7 +2,7 @@
 """
 Test MLX Encoder Model
 
-This script loads and tests MLX encoder models to verify they work correctly.
+This script loads and tests MLX encoder models with TRUE INT8 quantization.
 """
 
 import argparse
@@ -15,9 +15,45 @@ import mlx.core as mx
 from transformers import AutoTokenizer
 
 
+def load_quantized_weights(weights_file: Path) -> Dict[str, mx.array]:
+    """
+    Load quantized weights and dequantize them to MLX arrays.
+
+    Args:
+        weights_file: Path to weights.npz file
+
+    Returns:
+        Dictionary of dequantized MLX arrays ready for inference
+    """
+    # Load all weights
+    np_weights = np.load(weights_file)
+    mlx_weights = {}
+
+    # Separate regular weights from scale/zero-point metadata
+    weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
+
+    for name in weight_names:
+        weight = np_weights[name]
+
+        # Check if this weight was quantized
+        scale_name = f"{name}.__scale__"
+        if scale_name in np_weights:
+            # This was a quantized weight, dequantize it
+            scale = float(np_weights[scale_name])
+
+            # Dequantize: w_fp32 = w_int8 * scale
+            weight_dequant = weight.astype(np.float32) * scale
+            mlx_weights[name] = mx.array(weight_dequant)
+        else:
+            # Not quantized, use as-is
+            mlx_weights[name] = mx.array(weight)
+
+    return mlx_weights
+
+
 def load_mlx_model(model_path: Path) -> tuple:
     """
-    Load MLX encoder model from disk.
+    Load MLX encoder model from disk with dequantization.
 
     Args:
         model_path: Path to MLX model directory
@@ -25,14 +61,12 @@ def load_mlx_model(model_path: Path) -> tuple:
     Returns:
         Tuple of (weights, config, tokenizer)
     """
-    # Load weights
+    # Load weights with dequantization
     weights_file = model_path / "weights.npz"
     if not weights_file.exists():
         raise FileNotFoundError(f"Weights file not found: {weights_file}")
 
-    # Load numpy weights and convert to MLX
-    np_weights = np.load(weights_file)
-    mlx_weights = {k: mx.array(v) for k, v in np_weights.items()}
+    mlx_weights = load_quantized_weights(weights_file)
 
     # Load config
     config_file = model_path / "config.json"
@@ -48,7 +82,62 @@ def load_mlx_model(model_path: Path) -> tuple:
     return mlx_weights, config, tokenizer
 
 
-def test_model_loading(model_path: str):
+def analyze_quantization(model_path: Path):
+    """Analyze the quantization of the model."""
+    weights_file = model_path / "weights.npz"
+    np_weights = np.load(weights_file)
+
+    print("\nQuantization Analysis:")
+    print("-" * 60)
+
+    # Count different types of weights
+    int8_count = 0
+    float32_count = 0
+    scale_count = 0
+    int8_size_mb = 0
+    float32_size_mb = 0
+    total_size_mb = 0
+
+    for name, weight in np_weights.items():
+        size_mb = weight.nbytes / (1024 * 1024)
+        total_size_mb += size_mb
+
+        if name.endswith('.__scale__'):
+            scale_count += 1
+        elif weight.dtype == np.int8:
+            int8_count += 1
+            int8_size_mb += size_mb
+        else:
+            float32_count += 1
+            float32_size_mb += size_mb
+
+    print(f"Total parameters: {len(np_weights)}")
+    print(f"INT8 quantized layers: {int8_count}")
+    print(f"Float32 layers: {float32_count}")
+    print(f"Scale parameters: {scale_count}")
+    print()
+    print(f"INT8 layers size: {int8_size_mb:.2f} MB")
+    print(f"Float32 layers size: {float32_size_mb:.2f} MB")
+    print(f"Total size: {total_size_mb:.2f} MB")
+    print()
+
+    # Show sample quantized weights
+    print("Sample quantized weights:")
+    shown = 0
+    for name, weight in np_weights.items():
+        if weight.dtype == np.int8 and shown < 3:
+            scale_name = f"{name}.__scale__"
+            if scale_name in np_weights:
+                scale = np_weights[scale_name]
+                print(f"  {name}:")
+                print(f"    Shape: {weight.shape}")
+                print(f"    Dtype: {weight.dtype}")
+                print(f"    Range: [{weight.min()}, {weight.max()}]")
+                print(f"    Scale: {float(scale):.6f}")
+                shown += 1
+
+
+def test_model_loading(model_path: str, verbose: bool = False):
     """Test loading the MLX model."""
     print(f"Testing model loading from: {model_path}")
 
@@ -70,9 +159,16 @@ def test_model_loading(model_path: str):
         if metadata_file.exists():
             with open(metadata_file, 'r') as f:
                 metadata = json.load(f)
-            print(f"  - Quantization: {metadata['quantization']['bits']}-bit")
-            print(f"  - Model size: {metadata['quantization']['actual_size_mb']:.1f}MB")
+
+            print(f"  - Quantization: {metadata['quantization']['bits']}-bit ({metadata['quantization']['dtype']})")
+            print(f"  - Original size: {metadata['quantization']['original_size_mb']:.1f}MB")
+            print(f"  - Quantized size: {metadata['quantization']['actual_size_mb']:.1f}MB")
+            print(f"  - Compression: {metadata['quantization']['compression_ratio']:.2f}x")
             print(f"  - Converted: {metadata['timestamp']}")
+            print(f"  - Converter: {metadata.get('converter_version', 'v1')}")
+
+        if verbose:
+            analyze_quantization(model_path)
 
         return True
 
@@ -110,12 +206,9 @@ def test_tokenization(model_path: str, text: str = "This is a test sentence."):
 
 def test_embedding_extraction(model_path: str, text: str = "This is a test sentence."):
     """
-    Test basic embedding extraction from the model.
-
-    Note: This is a simple forward pass test - full model inference
-    would require implementing the full model architecture in MLX.
+    Test basic embedding extraction from the dequantized model.
     """
-    print(f"\nTesting embedding extraction")
+    print(f"\nTesting embedding extraction (with dequantization)")
 
     model_path = Path(model_path)
 
@@ -141,10 +234,14 @@ def test_embedding_extraction(model_path: str, text: str = "This is a test sente
         print(f"  - Embedding shape: {embeddings.shape}")
         print(f"  - Vocab size: {embeddings.shape[0]}")
         print(f"  - Hidden size: {embeddings.shape[1]}")
+        print(f"  - Dtype: {embeddings.dtype}")
 
         # Extract embeddings for input
         token_embeddings = embeddings[input_ids[0]]
         print(f"  - Extracted embeddings shape: {token_embeddings.shape}")
+
+        # Show sample values
+        print(f"  - Sample embedding values: {np.array(token_embeddings[0])[:5]}")
 
         return True
 
@@ -171,6 +268,11 @@ def main():
         action='store_true',
         help='Run all tests'
     )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Show detailed quantization analysis'
+    )
 
     args = parser.parse_args()
 
@@ -182,7 +284,7 @@ def main():
     success = True
 
     # Test 1: Loading
-    if not test_model_loading(args.model_path):
+    if not test_model_loading(args.model_path, args.verbose):
         success = False
 
     if args.full_test:
