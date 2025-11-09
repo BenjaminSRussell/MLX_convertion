@@ -107,19 +107,19 @@ def test_quantization():
     original = np.zeros(10)
     w_quant, scale = quantize_8bit(original)
     w_dequant = dequantize_8bit(w_quant, scale)
-    print(f"All zeros - Scale: {scale}, Max error: {np.max(np.abs(original - w_dequant)):.6f} ✓")
+    print(f"All zeros - Scale: {scale}, Max error: {np.max(np.abs(original - w_dequant)):.6f} PASS")
 
     # 4b: Very small values
     original = np.array([1e-8, -1e-8, 1e-7])
     w_quant, scale = quantize_8bit(original)
     w_dequant = dequantize_8bit(w_quant, scale)
-    print(f"Tiny values - Scale: {scale:.2e}, Max error: {np.max(np.abs(original - w_dequant)):.2e} ✓")
+    print(f"Tiny values - Scale: {scale:.2e}, Max error: {np.max(np.abs(original - w_dequant)):.2e} PASS")
 
     # 4c: Values at quantization boundaries
     original = np.array([127.0, -127.0, 0.0])
     w_quant, scale = quantize_8bit(original)
     w_dequant = dequantize_8bit(w_quant, scale)
-    print(f"At boundaries - Scale: {scale:.6f}, Max error: {np.max(np.abs(original - w_dequant)):.6f} ✓")
+    print(f"At boundaries - Scale: {scale:.6f}, Max error: {np.max(np.abs(original - w_dequant)):.6f} PASS")
     print()
 
     # Verify properties
@@ -156,14 +156,14 @@ def test_quantization():
 
     # Print results
     for name, passed in checks:
-        status = "✓" if passed else "✗"
-        print(f"{status} {name}: {'PASS' if passed else 'FAIL'}")
+        status = "PASS" if passed else "FAIL"
+        print(f"{status}: {name}")
 
     print()
     if all(check[1] for check in checks):
-        print("✓✓✓ ALL CHECKS PASSED - Quantization math is correct!")
+        print("ALL CHECKS PASSED - Quantization math is correct")
     else:
-        print("✗✗✗ SOME CHECKS FAILED - There may be issues!")
+        print("SOME CHECKS FAILED - There may be issues")
     print()
     print("=" * 80)
 

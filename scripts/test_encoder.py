@@ -150,7 +150,7 @@ def test_model_loading(model_path: str, verbose: bool = False):
     try:
         weights, config, tokenizer = load_mlx_model(model_path)
 
-        print(f"✓ Successfully loaded model")
+        print(f"Successfully loaded model")
         print(f"  - Config: {config.get('model_type', 'unknown')} ({config.get('_name_or_path', 'N/A')})")
         print(f"  - Weights: {len(weights)} parameters")
         print(f"  - Tokenizer: {len(tokenizer)} tokens")
@@ -200,7 +200,7 @@ def test_tokenization(model_path: str, text: str = "This is a test sentence."):
         # Tokenize
         inputs = tokenizer(text, return_tensors="np", padding=True, truncation=True)
 
-        print(f"✓ Tokenization successful")
+        print(f"Tokenization successful")
         print(f"  - Input IDs shape: {inputs['input_ids'].shape}")
         print(f"  - Tokens: {tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])[:10]}...")
 
@@ -239,7 +239,7 @@ def test_embedding_extraction(model_path: str, text: str = "This is a test sente
         embedding_key = embedding_keys[0]
         embeddings = weights[embedding_key]
 
-        print(f"✓ Found embeddings layer: {embedding_key}")
+        print(f"Found embeddings layer: {embedding_key}")
         print(f"  - Embedding shape: {embeddings.shape}")
         print(f"  - Vocab size: {embeddings.shape[0]}")
         print(f"  - Hidden size: {embeddings.shape[1]}")
@@ -307,9 +307,9 @@ def main():
 
     print("\n" + "="*60)
     if success:
-        print("✓ All tests passed!")
+        print("All tests passed")
     else:
-        print("✗ Some tests failed")
+        print("Some tests failed")
     print("="*60)
 
     return 0 if success else 1
