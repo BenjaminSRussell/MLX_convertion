@@ -161,9 +161,17 @@ def test_model_loading(model_path: str, verbose: bool = False):
                 metadata = json.load(f)
 
             print(f"  - Quantization: {metadata['quantization']['bits']}-bit ({metadata['quantization']['dtype']})")
-            print(f"  - Original size: {metadata['quantization']['original_size_mb']:.1f}MB")
-            print(f"  - Quantized size: {metadata['quantization']['actual_size_mb']:.1f}MB")
-            print(f"  - Compression: {metadata['quantization']['compression_ratio']:.2f}x")
+
+            # Handle old metadata that may be missing some fields
+            if 'original_size_mb' in metadata['quantization']:
+                print(f"  - Original size: {metadata['quantization']['original_size_mb']:.1f}MB")
+                print(f"  - Quantized size: {metadata['quantization']['actual_size_mb']:.1f}MB")
+                if 'compression_ratio' in metadata['quantization']:
+                    print(f"  - Compression: {metadata['quantization']['compression_ratio']:.2f}x")
+            else:
+                # Old metadata without original_size_mb
+                print(f"  - Quantized size: {metadata['quantization']['actual_size_mb']:.1f}MB")
+
             print(f"  - Converted: {metadata['timestamp']}")
             print(f"  - Converter: {metadata.get('converter_version', 'v1')}")
 

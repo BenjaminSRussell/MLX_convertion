@@ -172,7 +172,8 @@ def print_comparison_report(results: Dict[str, Any], metadata: Dict[str, Any]):
     print(f"Model: {metadata['model_name']}")
     print(f"Architecture: {metadata['architecture']}")
     print(f"Quantization: {metadata['quantization']['bits']}-bit ({metadata['quantization']['dtype']})")
-    print(f"Method: {metadata['quantization']['method']}")
+    method = metadata['quantization'].get('method', 'symmetric')  # Default to symmetric for old metadata
+    print(f"Method: {method}")
     print()
 
     overall = results['overall']

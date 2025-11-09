@@ -155,6 +155,80 @@ def calculate_model_size(weights: Dict[str, np.ndarray]) -> float:
     return total_bytes / (1024 * 1024)
 
 
+def migrate_old_metadata(metadata: Dict[str, Any], output_path: Path) -> Dict[str, Any]:
+    """
+    Migrate old metadata to include missing fields.
+
+    Args:
+        metadata: Existing metadata dictionary
+        output_path: Path to the converted model
+
+    Returns:
+        Updated metadata dictionary
+    """
+    updated = False
+
+    # Ensure 'method' field exists
+    if 'method' not in metadata.get('quantization', {}):
+        if 'quantization' not in metadata:
+            metadata['quantization'] = {}
+        metadata['quantization']['method'] = 'symmetric'
+        updated = True
+
+    # Try to calculate original_size_mb if missing
+    if 'original_size_mb' not in metadata.get('quantization', {}):
+        weights_file = output_path / 'weights.npz'
+        if weights_file.exists():
+            try:
+                # Load quantized weights to estimate original size
+                np_weights = np.load(weights_file)
+                # Count quantized parameters (those with scales)
+                scale_keys = [k for k in np_weights.keys() if k.endswith('.__scale__')]
+                quantized_params = 0
+                unquantized_params = 0
+
+                for key in np_weights.keys():
+                    if key.endswith('.__scale__'):
+                        continue
+                    weight = np_weights[key]
+                    scale_key = f"{key}.__scale__"
+                    if scale_key in np_weights:
+                        # This was quantized (int8 -> fp32 would be 4x larger)
+                        quantized_params += weight.size
+                    else:
+                        # Not quantized, stays fp32
+                        unquantized_params += weight.size
+
+                # Calculate original size: quantized params were fp32 (4 bytes), unquantized are fp32 (4 bytes)
+                original_bytes = (quantized_params * 4) + (unquantized_params * 4)
+                original_size_mb = original_bytes / (1024 * 1024)
+
+                metadata['quantization']['original_size_mb'] = original_size_mb
+                updated = True
+
+                # Calculate compression ratio if we have both sizes
+                if 'actual_size_mb' in metadata['quantization']:
+                    actual_size = metadata['quantization']['actual_size_mb']
+                    if actual_size > 0:
+                        metadata['quantization']['compression_ratio'] = original_size_mb / actual_size
+            except Exception:
+                # If we can't calculate, just skip
+                pass
+
+    # Add converter version if missing
+    if 'converter_version' not in metadata:
+        metadata['converter_version'] = 'v1'  # Mark as old version
+        updated = True
+
+    # Save updated metadata if changes were made
+    if updated:
+        metadata_file = output_path / 'conversion_metadata.json'
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+    return metadata
+
+
 def save_mlx_model(
     weights: Dict[str, np.ndarray],
     config: Dict[str, Any],
@@ -276,6 +350,10 @@ class EncoderModelConverter:
                 logger.info(f"Skipping {model_name} - already converted at {output_path}")
                 with open(metadata_file, 'r') as f:
                     existing_metadata = json.load(f)
+
+                # Migrate old metadata to include missing fields
+                existing_metadata = migrate_old_metadata(existing_metadata, output_path)
+
                 return {
                     'success': True,
                     'skipped': True,
