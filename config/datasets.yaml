@@ -1,0 +1,59 @@
+# Benchmark datasets configuration
+version: 1
+huggingface_cache: ../datasets
+
+datasets:
+  mnli:
+    provider: huggingface
+    name: multi_nli
+    splits:
+      train: train
+      validation: validation_mismatched
+    metrics:
+      - accuracy
+    preprocessing:
+      max_length: 1024
+      truncation: longest_first
+      padding: longest
+
+  snli:
+    provider: huggingface
+    name: snli
+    splits:
+      train: train
+      validation: validation
+    metrics:
+      - accuracy
+    preprocessing:
+      max_length: 512
+      truncation: longest_first
+      padding: max_length
+
+  sentiment:
+    provider: huggingface
+    name: glue
+    subset: sst2
+    splits:
+      train: train
+      validation: validation
+    metrics:
+      - accuracy
+      - f1
+    preprocessing:
+      max_length: 256
+      truncation: longest_first
+      padding: max_length
+
+  semantic:
+    provider: huggingface
+    name: stsb
+    splits:
+      train: train
+      validation: validation
+    metrics:
+      - spearmanr
+      - pearsonr
+    preprocessing:
+      max_length: 512
+      truncation: longest_first
+      padding: longest

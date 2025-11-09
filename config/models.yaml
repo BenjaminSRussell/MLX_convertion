@@ -1,0 +1,143 @@
+models:
+  - name: "distilbert-base-uncased-mnli"
+    hf_name: "typeform/distilbert-base-uncased-mnli"
+    task: "zero-shot-classification"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 125
+      max_accuracy_drop: 0.015  # 1.5% max accuracy drop allowed
+    benchmarks:
+      - mnli
+      - sentiment_analysis
+
+  - name: "all-MiniLM-L6-v2"
+    hf_name: "sentence-transformers/all-MiniLM-L6-v2"
+    task: "semantic-similarity"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.01   # 1.0% max accuracy drop allowed
+    benchmarks:
+      - sts
+      - semantic_similarity
+
+  - name: "deberta-v3-base-mnli"
+    hf_name: "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
+    task: "zero-shot-classification"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 200
+      max_accuracy_drop: 0.012  # 1.2% max accuracy drop allowed
+    benchmarks:
+      - mnli
+      - zero_shot_clf
+
+  # --- New NLI / zero-shot models (English) ---
+
+  - name: "bart-large-mnli"
+    hf_name: "facebook/bart-large-mnli"
+    task: "zero-shot-classification"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 480
+      max_accuracy_drop: 0.015
+    benchmarks:
+      - mnli
+      - zero_shot_clf
+
+  - name: "roberta-large-mnli"
+    hf_name: "FacebookAI/roberta-large-mnli"
+    task: "nli-classification"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 450
+      max_accuracy_drop: 0.012
+    benchmarks:
+      - mnli
+      - snli
+
+  - name: "modernbert-large-zeroshot-v2"
+    hf_name: "MoritzLaurer/ModernBERT-large-zeroshot-v2.0"
+    task: "zero-shot-classification"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 500
+      max_accuracy_drop: 0.01
+    benchmarks:
+      - mnli
+      - anli
+      - zero_shot_clf
+
+
+  # --- Smaller / efficient NLI models ---
+
+  - name: "mobilebert-uncased-mnli"
+    hf_name: "typeform/mobilebert-uncased-mnli"
+    task: "zero-shot-classification"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - mnli
+
+  - name: "deberta-v3-xsmall-mnli-binary"
+    hf_name: "MoritzLaurer/DeBERTa-v3-xsmall-mnli-fever-anli-ling-binary"
+    task: "binary-zero-shot-classification"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 100
+      max_accuracy_drop: 0.015
+    benchmarks:
+      - mnli
+      - anli
+      - fever
+      - zero_shot_clf_binary
+
+  - name: "xtremedistil-l6-h256-nli-binary"
+    hf_name: "MoritzLaurer/xtremedistil-l6-h256-mnli-fever-anli-ling-binary"
+    task: "binary-zero-shot-classification"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - mnli
+      - anli
+      - fever
+      - zero_shot_clf_binary
+
+  # --- NLI-trained sentence embedder models ---
+
+  - name: "all-mpnet-base-v2"
+    hf_name: "sentence-transformers/all-mpnet-base-v2"
+    task: "semantic-similarity"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 130
+      max_accuracy_drop: 0.01
+    benchmarks:
+      - sts
+      - semantic_similarity
+
+  - name: "all-MiniLM-L12-v2"
+    hf_name: "sentence-transformers/all-MiniLM-L12-v2"
+    task: "semantic-similarity"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 50
+      max_accuracy_drop: 0.01
+    benchmarks:
+      - sts
+      - semantic_similarity
