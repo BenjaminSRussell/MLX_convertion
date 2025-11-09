@@ -69,12 +69,27 @@ class PyTorchInt8Converter:
         """Quantize model to int8 using PyTorch dynamic quantization"""
         self.logger.info("Applying dynamic int8 quantization...")
 
-        # Dynamic quantization for linear layers
-        quantized_model = torch.quantization.quantize_dynamic(
-            model,
-            {torch.nn.Linear},
-            dtype=torch.qint8
-        )
+        # Suppress ALL deprecation warnings during quantization
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=DeprecationWarning)
+            warnings.filterwarnings('ignore', category=FutureWarning)
+
+            try:
+                # Try new API first (PyTorch 2.0+)
+                from torch.ao.quantization import quantize_dynamic
+                quantized_model = quantize_dynamic(
+                    model,
+                    {torch.nn.Linear},
+                    dtype=torch.qint8
+                )
+            except (ImportError, AttributeError):
+                # Fall back to old API (PyTorch < 2.0)
+                quantized_model = torch.quantization.quantize_dynamic(
+                    model,
+                    {torch.nn.Linear},
+                    dtype=torch.qint8
+                )
 
         return quantized_model
 
