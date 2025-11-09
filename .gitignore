@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Model outputs (converted models stored here)
+models/
+
+# Results and logs (stored in temp directory)
+results/
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Data
+*.csv
+*.tsv
+*.json.gz
+*.pkl
+*.pickle
+
+# HuggingFace cache
+.cache/

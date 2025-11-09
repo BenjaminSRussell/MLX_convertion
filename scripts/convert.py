@@ -3,20 +3,23 @@ import yaml
 import json
 import os
 import time
+import tempfile
 from pathlib import Path
 import subprocess
 import logging
 from datetime import datetime
 import mlx.core as mx
 import concurrent.futures
+import glob
 
 def setup_logging(model_name=None):
     """Set up logging for the conversion process."""
-    log_dir = Path('results/conversion_logs')
+    temp_dir = os.environ.get('MLX_TEMP_DIR', tempfile.gettempdir())
+    log_dir = Path(temp_dir) / 'mlx_conversion' / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     log_file = log_dir / f"conversion_{model_name}.log" if model_name else log_dir / "conversion_summary.log"
-    
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -28,14 +31,33 @@ def setup_logging(model_name=None):
     return logging.getLogger(f'MLXConverter_{model_name}' if model_name else 'MLXConverter')
 
 class Bit8ModelConverter:
-    def __init__(self, config_path='config/models.yaml', output_dir='models/mlx_converted', dry_run=False):
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        self.results_dir = Path('results/conversion_logs')
+    def __init__(self, config_path='config/models.yaml', output_dir='models/mlx_converted', dry_run=False, skip_existing=True):
+        # Support multiple yaml files (glob pattern or single file)
+        self.config = {'models': []}
+        config_files = []
+
+        if isinstance(config_path, list):
+            config_files = config_path
+        elif '*' in config_path or '?' in config_path:
+            config_files = glob.glob(config_path)
+        else:
+            config_files = [config_path]
+
+        # Load all config files and merge
+        for cfg_file in config_files:
+            if Path(cfg_file).exists():
+                with open(cfg_file, 'r') as f:
+                    cfg_data = yaml.safe_load(f)
+                    if 'models' in cfg_data:
+                        self.config['models'].extend(cfg_data['models'])
+
+        temp_dir = os.environ.get('MLX_TEMP_DIR', tempfile.gettempdir())
+        self.results_dir = Path(temp_dir) / 'mlx_conversion' / 'results'
         self.results_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir = Path(output_dir)
         self.logger = setup_logging()
         self.dry_run = dry_run
+        self.skip_existing = skip_existing
         
     def convert_single_model(self, model_config):
         """Convert a single model to MLX format"""
@@ -43,11 +65,26 @@ class Bit8ModelConverter:
         logger = setup_logging(model_name)
         start_time = time.time()
         quant_config = model_config['quantization']
-        
+
         logger.info(f"Starting conversion: {model_name}")
-        
+
         # Create output directory
         output_path = self.output_dir / f"{model_name}-mlx-q{quant_config['bits']}"
+
+        # Check if model already exists and skip if requested
+        if self.skip_existing and output_path.exists():
+            metadata_file = output_path / 'conversion_metadata.json'
+            if metadata_file.exists():
+                logger.info(f"Skipping {model_name} - already converted at {output_path}")
+                with open(metadata_file, 'r') as f:
+                    existing_metadata = json.load(f)
+                return {
+                    'success': True,
+                    'skipped': True,
+                    'metadata': existing_metadata,
+                    'output_path': str(output_path)
+                }
+
         output_path.mkdir(parents=True, exist_ok=True)
         
         # Build conversion command
@@ -57,13 +94,13 @@ class Bit8ModelConverter:
             '--mlx-path', str(output_path),
             '--quantize',
             '--q-bits', str(quant_config['bits']),
-            '--q-group-size', str(quant_config['group_size'])
+            '--q-group-size', str(quant_config.get('group_size', 64))
         ]
         
-        logger.info(f"🔧 Running command: {' '.join(cmd)}")
+        logger.info(f"Running command: {' '.join(cmd)}")
         
         if self.dry_run:
-            logger.info("🌵 Dry-run enabled, skipping execution")
+            logger.info("Dry-run enabled, skipping execution")
             return {
                 'success': True,
                 'dry_run': True,
@@ -198,16 +235,17 @@ class Bit8ModelConverter:
 
 def main():
     parser = argparse.ArgumentParser(description='Convert models to MLX format')
-    parser.add_argument('--config', default='config/models.yaml', help='Path to models config')
+    parser.add_argument('--config', default='config/models.yaml', help='Path to models config (supports glob patterns like config/*.yaml)')
     parser.add_argument('--model', help='Specific model to convert (all if not specified)')
     parser.add_argument('--output-dir', default='models/mlx_converted', help='Output directory for converted models')
     parser.add_argument('--dry-run', action='store_true', help='Print conversion commands without executing them')
-    
+    parser.add_argument('--no-skip', action='store_true', help='Force re-conversion even if model already exists')
+
     args = parser.parse_args()
-    
+
     logger = setup_logging()
-    
-    converter = Bit8ModelConverter(args.config, args.output_dir, args.dry_run)
+
+    converter = Bit8ModelConverter(args.config, args.output_dir, args.dry_run, skip_existing=not args.no_skip)
     
     if args.model:
         # Convert specific model

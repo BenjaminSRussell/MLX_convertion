@@ -1,6 +1,7 @@
 # Benchmark datasets configuration
 version: 1
 huggingface_cache: ../datasets
+cache_dir: /tmp/hf_datasets
 
 datasets:
   mnli:
@@ -57,3 +58,111 @@ datasets:
       max_length: 512
       truncation: longest_first
       padding: longest
+
+  # Alias for sentiment
+  sentiment_analysis:
+    provider: huggingface
+    name: glue
+    subset: sst2
+    splits:
+      train: train
+      validation: validation
+    metrics:
+      - accuracy
+      - f1
+    preprocessing:
+      max_length: 256
+      truncation: longest_first
+      padding: max_length
+
+  # Alias for semantic similarity
+  sts:
+    provider: huggingface
+    name: stsb_multi_mt
+    subset: en
+    splits:
+      train: train
+      validation: dev
+    metrics:
+      - spearmanr
+      - pearsonr
+    preprocessing:
+      max_length: 512
+      truncation: longest_first
+      padding: longest
+      cache_dir: /tmp/hf_datasets
+
+  semantic_similarity:
+    provider: huggingface
+    name: sentence-transformers/stsb
+    splits:
+      train: train
+      validation: validation
+    metrics:
+      - spearmanr
+      - pearsonr
+    preprocessing:
+      max_length: 512
+      truncation: longest_first
+      padding: longest
+      cache_dir: /tmp/hf_datasets
+
+  # Zero-shot classification datasets
+  zero_shot_clf:
+    provider: huggingface
+    name: multi_nli
+    splits:
+      train: train
+      validation: validation_matched
+    metrics:
+      - accuracy
+    preprocessing:
+      max_length: 1024
+      truncation: longest_first
+      padding: longest
+      cache_dir: /tmp/hf_datasets
+
+  zero_shot_clf_binary:
+    provider: huggingface
+    name: multi_nli
+    splits:
+      train: train
+      validation: validation_matched
+    metrics:
+      - accuracy
+    preprocessing:
+      max_length: 1024
+      truncation: longest_first
+      padding: longest
+      cache_dir: /tmp/hf_datasets
+
+  # ANLI dataset
+  anli:
+    provider: huggingface
+    name: anli
+    splits:
+      train: train_r1
+      validation: dev_r1
+    metrics:
+      - accuracy
+    preprocessing:
+      max_length: 1024
+      truncation: longest_first
+      padding: longest
+      cache_dir: /tmp/hf_datasets
+
+  # FEVER dataset
+  fever:
+    provider: huggingface
+    name: fever
+    subset: v1.0
+    splits:
+      train: train
+      validation: labelled_dev
+    metrics:
+      - accuracy
+    preprocessing:
+      max_length: 1024
+      truncation: longest_first
+      padding: longest
+      cache_dir: /tmp/hf_datasets
