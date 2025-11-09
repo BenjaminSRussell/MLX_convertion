@@ -31,7 +31,6 @@ def load_mlx_weights(model_path: Path) -> Dict[str, np.ndarray]:
     if not weights_file.exists():
         raise FileNotFoundError(f"Weights file not found: {weights_file}")
 
-    np_weights = np.load(weights_file)
     dequantized_weights = {}
 
     # Get metadata
@@ -39,22 +38,23 @@ def load_mlx_weights(model_path: Path) -> Dict[str, np.ndarray]:
     with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
-    # Dequantize INT8 weights
-    weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
+    # Load and dequantize INT8 weights with proper resource management
+    with np.load(weights_file) as np_weights:
+        weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
 
-    for name in weight_names:
-        weight = np_weights[name]
+        for name in weight_names:
+            weight = np_weights[name]
 
-        # Check if quantized
-        scale_name = f"{name}.__scale__"
-        if scale_name in np_weights:
-            # Dequantize: w_fp32 = w_int8 * scale
-            scale = float(np_weights[scale_name])
-            weight_dequant = weight.astype(np.float32) * scale
-            dequantized_weights[name] = weight_dequant
-        else:
-            # Not quantized (embeddings, norms, biases)
-            dequantized_weights[name] = weight.astype(np.float32)
+            # Check if quantized
+            scale_name = f"{name}.__scale__"
+            if scale_name in np_weights:
+                # Dequantize: w_fp32 = w_int8 * scale
+                scale = float(np_weights[scale_name])
+                weight_dequant = weight.astype(np.float32) * scale
+                dequantized_weights[name] = weight_dequant
+            else:
+                # Not quantized (embeddings, norms, biases)
+                dequantized_weights[name] = weight.astype(np.float32)
 
     return dequantized_weights, metadata
 

@@ -25,28 +25,28 @@ def load_quantized_weights(weights_file: Path) -> Dict[str, mx.array]:
     Returns:
         Dictionary of dequantized MLX arrays ready for inference
     """
-    # Load all weights
-    np_weights = np.load(weights_file)
     mlx_weights = {}
 
-    # Separate regular weights from scale/zero-point metadata
-    weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
+    # Load all weights with proper resource management
+    with np.load(weights_file) as np_weights:
+        # Separate regular weights from scale/zero-point metadata
+        weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
 
-    for name in weight_names:
-        weight = np_weights[name]
+        for name in weight_names:
+            weight = np_weights[name]
 
-        # Check if this weight was quantized
-        scale_name = f"{name}.__scale__"
-        if scale_name in np_weights:
-            # This was a quantized weight, dequantize it
-            scale = float(np_weights[scale_name])
+            # Check if this weight was quantized
+            scale_name = f"{name}.__scale__"
+            if scale_name in np_weights:
+                # This was a quantized weight, dequantize it
+                scale = float(np_weights[scale_name])
 
-            # Dequantize: w_fp32 = w_int8 * scale
-            weight_dequant = weight.astype(np.float32) * scale
-            mlx_weights[name] = mx.array(weight_dequant)
-        else:
-            # Not quantized, use as-is
-            mlx_weights[name] = mx.array(weight)
+                # Dequantize: w_fp32 = w_int8 * scale
+                weight_dequant = weight.astype(np.float32) * scale
+                mlx_weights[name] = mx.array(weight_dequant)
+            else:
+                # Not quantized, use as-is
+                mlx_weights[name] = mx.array(weight)
 
     return mlx_weights
 
