@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "$0")" && pwd)
 SCRIPTS_DIR="$ROOT_DIR/scripts"
 CONFIG_DIR="$ROOT_DIR/config"
+MLX_MODELS_DIR="$ROOT_DIR/models/mlx_converted"
 
 usage() {
   cat <<USAGE
@@ -14,6 +15,7 @@ Options:
   --datasets "d1 d2" Limit to dataset keys for testing
   --dry-run           Don't execute conversions/tests, just print
   --upload MODEL:QUANT Upload the MODEL/QUANT pair after verification
+  --clear-cache       Clear the models/mlx_converted directory before running
   -h, --help          Show this message
 USAGE
 }
@@ -22,6 +24,7 @@ MODELS=""
 DATASETS=""
 DRY_RUN=""
 UPLOAD_TARGET=""
+CLEAR_CACHE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,6 +43,9 @@ while [[ $# -gt 0 ]]; do
       shift
       UPLOAD_TARGET="$1"
       ;;
+    --clear-cache)
+      CLEAR_CACHE="true"
+      ;;
     -h|--help)
       usage
       exit 0
@@ -52,6 +58,18 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+clear_cache() {
+  if [[ -n "$CLEAR_CACHE" ]]; then
+    echo "[pipeline] Clearing MLX converted models cache"
+    if [[ -d "$MLX_MODELS_DIR" ]]; then
+      find "$MLX_MODELS_DIR" -mindepth 1 -delete
+      echo "[pipeline] Cache cleared"
+    else
+      echo "[pipeline] Cache directory not found, skipping"
+    fi
+  fi
+}
 
 run_convert() {
   echo "[pipeline] Starting conversion jobs"
@@ -93,6 +111,7 @@ run_upload() {
   python "$SCRIPTS_DIR/upload.py" "$model" "$quant" "${ARGS[@]}"
 }
 
+clear_cache
 run_convert "${MODELS[@]}"
 run_tests "${MODELS[@]}"
 run_upload
