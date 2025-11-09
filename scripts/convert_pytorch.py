@@ -1,3 +1,7 @@
+"""
+PyTorch-based 8-bit quantization converter
+Works on x86_64 Linux (alternative to MLX which requires Apple Silicon)
+"""
 import argparse
 import yaml
 import json
@@ -5,10 +9,10 @@ import os
 import time
 import tempfile
 from pathlib import Path
-import subprocess
 import logging
 from datetime import datetime
-import mlx.core as mx
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import concurrent.futures
 import glob
 
@@ -28,9 +32,11 @@ def setup_logging(model_name=None):
             logging.StreamHandler()
         ]
     )
-    return logging.getLogger(f'MLXConverter_{model_name}' if model_name else 'MLXConverter')
+    return logging.getLogger(f'PyTorchConverter_{model_name}' if model_name else 'PyTorchConverter')
 
-class Bit8ModelConverter:
+class PyTorchInt8Converter:
+    """Convert models to 8-bit quantized PyTorch format"""
+
     def __init__(self, config_path='config/models.yaml', output_dir='models/mlx_converted', dry_run=False, skip_existing=True):
         # Support multiple yaml files (glob pattern or single file)
         self.config = {'models': []}
@@ -58,9 +64,22 @@ class Bit8ModelConverter:
         self.logger = setup_logging()
         self.dry_run = dry_run
         self.skip_existing = skip_existing
-        
+
+    def quantize_model(self, model):
+        """Quantize model to int8 using PyTorch dynamic quantization"""
+        self.logger.info("Applying dynamic int8 quantization...")
+
+        # Dynamic quantization for linear layers
+        quantized_model = torch.quantization.quantize_dynamic(
+            model,
+            {torch.nn.Linear},
+            dtype=torch.qint8
+        )
+
+        return quantized_model
+
     def convert_single_model(self, model_config):
-        """Convert a single model to MLX format"""
+        """Convert a single model to quantized PyTorch format"""
         model_name = model_config['name']
         logger = setup_logging(model_name)
         start_time = time.time()
@@ -86,62 +105,42 @@ class Bit8ModelConverter:
                 }
 
         output_path.mkdir(parents=True, exist_ok=True)
-        
-        # Build conversion command
-        cmd = [
-            'python', '-m', 'mlx_lm.convert',
-            '--model', model_config['hf_name'],
-            '--mlx-path', str(output_path),
-            '--quantize',
-            '--q-bits', str(quant_config['bits']),
-            '--q-group-size', str(quant_config.get('group_size', 64))
-        ]
-        
-        logger.info(f"🔧 Running command: {' '.join(cmd)}")
-        
+
         if self.dry_run:
             logger.info("🌵 Dry-run enabled, skipping execution")
             return {
                 'success': True,
                 'dry_run': True,
-                'command': ' '.join(cmd)
+                'model_name': model_name
             }
-        
+
         try:
-            # Execute conversion with progress
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1
-            )
-            
-            # Stream output for progress monitoring
-            while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    logger.info(output.strip())
-            
-            stderr = process.stderr.read()
-            return_code = process.poll()
-            
-            if return_code != 0:
-                logger.error(f"Conversion failed with return code {return_code}")
-                logger.error(f"Error output: {stderr}")
-                return {
-                    'success': False,
-                    'error': stderr,
-                    'return_code': return_code
-                }
-            
+            # Load model and tokenizer
+            logger.info(f"📥 Loading model from HuggingFace: {model_config['hf_name']}")
+            tokenizer = AutoTokenizer.from_pretrained(model_config['hf_name'])
+            model = AutoModelForSequenceClassification.from_pretrained(model_config['hf_name'])
+
+            # Quantize model
+            logger.info("🔧 Quantizing model to int8...")
+            quantized_model = self.quantize_model(model)
+
+            # Save quantized model and tokenizer
+            logger.info(f"💾 Saving quantized model to {output_path}")
+            # Save tokenizer first
+            tokenizer.save_pretrained(output_path)
+
+            # Save quantized model using torch.save (quantized models can't use save_pretrained)
+            model_path = output_path / 'pytorch_model.bin'
+            torch.save(quantized_model.state_dict(), model_path)
+
+            # Also save the original config
+            model.config.save_pretrained(output_path)
+
             duration = time.time() - start_time
-            
-            # Get model size
+
+            # Calculate model size
             model_size_mb = sum(f.stat().st_size for f in output_path.glob('**/*') if f.is_file()) / (1024 * 1024)
-            
+
             # Save conversion metadata
             metadata = {
                 'model_name': model_name,
@@ -150,114 +149,111 @@ class Bit8ModelConverter:
                     'bits': quant_config['bits'],
                     'dtype': quant_config['dtype'],
                     'target_size_mb': quant_config['target_size_mb'],
-                    'actual_size_mb': model_size_mb
+                    'actual_size_mb': model_size_mb,
+                    'method': 'pytorch_dynamic_quantization'
                 },
                 'conversion_time_seconds': duration,
-                'conversion_command': ' '.join(cmd),
                 'timestamp': datetime.now().isoformat(),
-                'mlx_version': mx.__version__,
-                'device': str(mx.default_device()),
+                'pytorch_version': torch.__version__,
                 'size_accuracy_ratio': model_size_mb / quant_config['target_size_mb']
             }
-            
+
             metadata_file = output_path / 'conversion_metadata.json'
             with open(metadata_file, 'w') as f:
                 json.dump(metadata, f, indent=2)
-            
-            logger.info(f"Conversion successful in {duration:.2f} seconds")
-            logger.info(f"Model size: {model_size_mb:.1f}MB (target: {quant_config['target_size_mb']}MB)")
-            
+
+            logger.info(f"✅ Conversion successful in {duration:.2f} seconds")
+            logger.info(f"📊 Model size: {model_size_mb:.1f}MB (target: {quant_config['target_size_mb']}MB)")
+
             return {
                 'success': True,
                 'metadata': metadata,
                 'output_path': str(output_path)
             }
-            
+
         except Exception as e:
-            logger.error(f"Unexpected error during conversion: {str(e)}")
+            logger.error(f"❌ Conversion failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return {
                 'success': False,
                 'error': str(e)
             }
-    
+
     def convert_all_models(self):
-        """Convert all configured models to MLX format in parallel."""
-        self.logger.info("Starting parallel conversion batch for all models")
-        
+        """Convert all configured models"""
+        self.logger.info(f"Starting batch conversion for {len(self.config['models'])} models")
+
         results = {}
-        
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_to_model = {executor.submit(self.convert_single_model, model_config): model_config for model_config in self.config['models']}
-            
-            for future in concurrent.futures.as_completed(future_to_model):
-                model_config = future_to_model[future]
-                model_name = model_config['name']
-                try:
-                    result = future.result()
-                    results[model_name] = result
-                    
-                    # Save intermediate results
-                    with open(self.results_dir / f"{model_name}_conversion.json", 'w') as f:
-                        json.dump(result, f, indent=2)
-                        
-                except Exception as exc:
-                    self.logger.error(f"{model_name} generated an exception: {exc}")
-                    results[model_name] = {'success': False, 'error': str(exc)}
+
+        for model_config in self.config['models']:
+            model_name = model_config['name']
+            try:
+                result = self.convert_single_model(model_config)
+                results[model_name] = result
+
+                # Save intermediate results
+                with open(self.results_dir / f"{model_name}_conversion.json", 'w') as f:
+                    json.dump(result, f, indent=2)
+
+            except Exception as exc:
+                self.logger.error(f"{model_name} generated an exception: {exc}")
+                results[model_name] = {'success': False, 'error': str(exc)}
 
         # Save final summary
         summary_file = self.results_dir / 'conversion_summary.json'
         with open(summary_file, 'w') as f:
             json.dump(results, f, indent=2)
-        
-        self.logger.info(f"Conversion summary saved to {summary_file}")
-        
+
+        self.logger.info(f"📊 Conversion summary saved to {summary_file}")
+
         # Print summary
         successful = [name for name, result in results.items() if result.get('success', False)]
         failed = [name for name, result in results.items() if not result.get('success', False)]
-        
+
         self.logger.info(f"\n{'='*60}")
         self.logger.info("CONVERSION SUMMARY")
         self.logger.info(f"{'='*60}")
-        self.logger.info(f"Successful: {len(successful)} models")
-        self.logger.info(f"Failed: {len(failed)} models")
-        
+        self.logger.info(f"✅ Successful: {len(successful)} models")
+        self.logger.info(f"❌ Failed: {len(failed)} models")
+
         if successful:
             self.logger.info("Successful conversions:")
             for name in successful:
                 self.logger.info(f"  - {name}")
-        
+
         if failed:
             self.logger.error("Failed conversions:")
             for name in failed:
                 self.logger.error(f"  - {name}")
-        
+
         return results
 
 def main():
-    parser = argparse.ArgumentParser(description='Convert models to MLX format')
-    parser.add_argument('--config', default='config/models.yaml', help='Path to models config (supports glob patterns like config/*.yaml)')
+    parser = argparse.ArgumentParser(description='Convert models to 8-bit PyTorch quantized format')
+    parser.add_argument('--config', default='config/models.yaml', help='Path to models config (supports glob patterns)')
     parser.add_argument('--model', help='Specific model to convert (all if not specified)')
     parser.add_argument('--output-dir', default='models/mlx_converted', help='Output directory for converted models')
-    parser.add_argument('--dry-run', action='store_true', help='Print conversion commands without executing them')
+    parser.add_argument('--dry-run', action='store_true', help='Print conversion plan without executing')
     parser.add_argument('--no-skip', action='store_true', help='Force re-conversion even if model already exists')
 
     args = parser.parse_args()
 
     logger = setup_logging()
 
-    converter = Bit8ModelConverter(args.config, args.output_dir, args.dry_run, skip_existing=not args.no_skip)
-    
+    converter = PyTorchInt8Converter(args.config, args.output_dir, args.dry_run, skip_existing=not args.no_skip)
+
     if args.model:
         # Convert specific model
         model_config = next((m for m in converter.config['models'] if m['name'] == args.model), None)
         if not model_config:
             logger.error(f"Model '{args.model}' not found in config")
             return 1
-        
+
         result = converter.convert_single_model(model_config)
         print(json.dumps(result, indent=2))
         return 0 if result.get('success', False) else 1
-        
+
     else:
         # Convert all models
         results = converter.convert_all_models()

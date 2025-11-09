@@ -10,3 +10,4 @@ pyyaml>=6.0.1
 tqdm>=4.66.0
 sentencepiece>=0.1.99
 safetensors>=0.4.2
+psutil>=5.9.0
