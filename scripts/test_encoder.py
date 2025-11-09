@@ -85,7 +85,6 @@ def load_mlx_model(model_path: Path) -> tuple:
 def analyze_quantization(model_path: Path):
     """Analyze the quantization of the model."""
     weights_file = model_path / "weights.npz"
-    np_weights = np.load(weights_file)
 
     print("\nQuantization Analysis:")
     print("-" * 60)
@@ -98,43 +97,45 @@ def analyze_quantization(model_path: Path):
     float32_size_mb = 0
     total_size_mb = 0
 
-    for name, weight in np_weights.items():
-        size_mb = weight.nbytes / (1024 * 1024)
-        total_size_mb += size_mb
+    # Load weights with proper resource management
+    with np.load(weights_file) as np_weights:
+        for name, weight in np_weights.items():
+            size_mb = weight.nbytes / (1024 * 1024)
+            total_size_mb += size_mb
 
-        if name.endswith('.__scale__'):
-            scale_count += 1
-        elif weight.dtype == np.int8:
-            int8_count += 1
-            int8_size_mb += size_mb
-        else:
-            float32_count += 1
-            float32_size_mb += size_mb
+            if name.endswith('.__scale__'):
+                scale_count += 1
+            elif weight.dtype == np.int8:
+                int8_count += 1
+                int8_size_mb += size_mb
+            else:
+                float32_count += 1
+                float32_size_mb += size_mb
 
-    print(f"Total parameters: {len(np_weights)}")
-    print(f"INT8 quantized layers: {int8_count}")
-    print(f"Float32 layers: {float32_count}")
-    print(f"Scale parameters: {scale_count}")
-    print()
-    print(f"INT8 layers size: {int8_size_mb:.2f} MB")
-    print(f"Float32 layers size: {float32_size_mb:.2f} MB")
-    print(f"Total size: {total_size_mb:.2f} MB")
-    print()
+        print(f"Total parameters: {len(np_weights)}")
+        print(f"INT8 quantized layers: {int8_count}")
+        print(f"Float32 layers: {float32_count}")
+        print(f"Scale parameters: {scale_count}")
+        print()
+        print(f"INT8 layers size: {int8_size_mb:.2f} MB")
+        print(f"Float32 layers size: {float32_size_mb:.2f} MB")
+        print(f"Total size: {total_size_mb:.2f} MB")
+        print()
 
-    # Show sample quantized weights
-    print("Sample quantized weights:")
-    shown = 0
-    for name, weight in np_weights.items():
-        if weight.dtype == np.int8 and shown < 3:
-            scale_name = f"{name}.__scale__"
-            if scale_name in np_weights:
-                scale = np_weights[scale_name]
-                print(f"  {name}:")
-                print(f"    Shape: {weight.shape}")
-                print(f"    Dtype: {weight.dtype}")
-                print(f"    Range: [{weight.min()}, {weight.max()}]")
-                print(f"    Scale: {float(scale):.6f}")
-                shown += 1
+        # Show sample quantized weights
+        print("Sample quantized weights:")
+        shown = 0
+        for name, weight in np_weights.items():
+            if weight.dtype == np.int8 and shown < 3:
+                scale_name = f"{name}.__scale__"
+                if scale_name in np_weights:
+                    scale = np_weights[scale_name]
+                    print(f"  {name}:")
+                    print(f"    Shape: {weight.shape}")
+                    print(f"    Dtype: {weight.dtype}")
+                    print(f"    Range: [{weight.min()}, {weight.max()}]")
+                    print(f"    Scale: {float(scale):.6f}")
+                    shown += 1
 
 
 def test_model_loading(model_path: str, verbose: bool = False):

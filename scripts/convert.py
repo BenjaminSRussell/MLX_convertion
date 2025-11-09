@@ -169,7 +169,7 @@ class Bit8ModelConverter:
                 'timestamp': datetime.now().isoformat(),
                 'mlx_version': mx.__version__,
                 'device': str(mx.default_device()),
-                'size_target_ratio': model_size_mb / quant_config['target_size_mb']
+                'size_target_ratio': model_size_mb / quant_config['target_size_mb'] if quant_config['target_size_mb'] > 0 else 0.0
             }
             
             metadata_file = output_path / 'conversion_metadata.json'

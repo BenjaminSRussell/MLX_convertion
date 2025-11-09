@@ -440,7 +440,7 @@ class EncoderModelConverter:
                 'timestamp': datetime.now().isoformat(),
                 'mlx_version': mx.__version__,
                 'device': str(mx.default_device()),
-                'size_target_ratio': quantized_size_mb / quant_config['target_size_mb'],
+                'size_target_ratio': quantized_size_mb / quant_config['target_size_mb'] if quant_config['target_size_mb'] > 0 else 0.0,
                 'converter_version': 'v2'
             }
 
