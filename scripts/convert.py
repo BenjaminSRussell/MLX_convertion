@@ -11,6 +11,7 @@ from datetime import datetime
 import mlx.core as mx
 import concurrent.futures
 import glob
+import shutil
 
 def setup_logging(model_name=None):
     """Set up logging for the conversion process."""
@@ -85,7 +86,13 @@ class Bit8ModelConverter:
                     'output_path': str(output_path)
                 }
 
-        output_path.mkdir(parents=True, exist_ok=True)
+        # If directory exists but has no metadata (incomplete conversion), remove it
+        if output_path.exists():
+            logger.info(f"Removing incomplete conversion at {output_path}")
+            shutil.rmtree(output_path)
+
+        # Ensure parent directory exists, but let mlx_lm.convert create the model directory
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Build conversion command
         cmd = [
