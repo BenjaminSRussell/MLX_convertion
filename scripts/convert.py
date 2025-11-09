@@ -90,7 +90,7 @@ class Bit8ModelConverter:
         # Build conversion command
         cmd = [
             'python', '-m', 'mlx_lm.convert',
-            '--model', model_config['hf_name'],
+            '--hf-path', model_config['hf_name'],
             '--mlx-path', str(output_path),
             '--quantize',
             '--q-bits', str(quant_config['bits']),
