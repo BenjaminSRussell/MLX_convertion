@@ -25,28 +25,28 @@ def load_quantized_weights(weights_file: Path) -> Dict[str, mx.array]:
     Returns:
         Dictionary of dequantized MLX arrays ready for inference
     """
-    # Load all weights
-    np_weights = np.load(weights_file)
     mlx_weights = {}
 
-    # Separate regular weights from scale/zero-point metadata
-    weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
+    # Load all weights with proper resource management
+    with np.load(weights_file) as np_weights:
+        # Separate regular weights from scale/zero-point metadata
+        weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
 
-    for name in weight_names:
-        weight = np_weights[name]
+        for name in weight_names:
+            weight = np_weights[name]
 
-        # Check if this weight was quantized
-        scale_name = f"{name}.__scale__"
-        if scale_name in np_weights:
-            # This was a quantized weight, dequantize it
-            scale = float(np_weights[scale_name])
+            # Check if this weight was quantized
+            scale_name = f"{name}.__scale__"
+            if scale_name in np_weights:
+                # This was a quantized weight, dequantize it
+                scale = float(np_weights[scale_name])
 
-            # Dequantize: w_fp32 = w_int8 * scale
-            weight_dequant = weight.astype(np.float32) * scale
-            mlx_weights[name] = mx.array(weight_dequant)
-        else:
-            # Not quantized, use as-is
-            mlx_weights[name] = mx.array(weight)
+                # Dequantize: w_fp32 = w_int8 * scale
+                weight_dequant = weight.astype(np.float32) * scale
+                mlx_weights[name] = mx.array(weight_dequant)
+            else:
+                # Not quantized, use as-is
+                mlx_weights[name] = mx.array(weight)
 
     return mlx_weights
 
@@ -85,7 +85,6 @@ def load_mlx_model(model_path: Path) -> tuple:
 def analyze_quantization(model_path: Path):
     """Analyze the quantization of the model."""
     weights_file = model_path / "weights.npz"
-    np_weights = np.load(weights_file)
 
     print("\nQuantization Analysis:")
     print("-" * 60)
@@ -98,43 +97,45 @@ def analyze_quantization(model_path: Path):
     float32_size_mb = 0
     total_size_mb = 0
 
-    for name, weight in np_weights.items():
-        size_mb = weight.nbytes / (1024 * 1024)
-        total_size_mb += size_mb
+    # Load weights with proper resource management
+    with np.load(weights_file) as np_weights:
+        for name, weight in np_weights.items():
+            size_mb = weight.nbytes / (1024 * 1024)
+            total_size_mb += size_mb
 
-        if name.endswith('.__scale__'):
-            scale_count += 1
-        elif weight.dtype == np.int8:
-            int8_count += 1
-            int8_size_mb += size_mb
-        else:
-            float32_count += 1
-            float32_size_mb += size_mb
+            if name.endswith('.__scale__'):
+                scale_count += 1
+            elif weight.dtype == np.int8:
+                int8_count += 1
+                int8_size_mb += size_mb
+            else:
+                float32_count += 1
+                float32_size_mb += size_mb
 
-    print(f"Total parameters: {len(np_weights)}")
-    print(f"INT8 quantized layers: {int8_count}")
-    print(f"Float32 layers: {float32_count}")
-    print(f"Scale parameters: {scale_count}")
-    print()
-    print(f"INT8 layers size: {int8_size_mb:.2f} MB")
-    print(f"Float32 layers size: {float32_size_mb:.2f} MB")
-    print(f"Total size: {total_size_mb:.2f} MB")
-    print()
+        print(f"Total parameters: {len(np_weights)}")
+        print(f"INT8 quantized layers: {int8_count}")
+        print(f"Float32 layers: {float32_count}")
+        print(f"Scale parameters: {scale_count}")
+        print()
+        print(f"INT8 layers size: {int8_size_mb:.2f} MB")
+        print(f"Float32 layers size: {float32_size_mb:.2f} MB")
+        print(f"Total size: {total_size_mb:.2f} MB")
+        print()
 
-    # Show sample quantized weights
-    print("Sample quantized weights:")
-    shown = 0
-    for name, weight in np_weights.items():
-        if weight.dtype == np.int8 and shown < 3:
-            scale_name = f"{name}.__scale__"
-            if scale_name in np_weights:
-                scale = np_weights[scale_name]
-                print(f"  {name}:")
-                print(f"    Shape: {weight.shape}")
-                print(f"    Dtype: {weight.dtype}")
-                print(f"    Range: [{weight.min()}, {weight.max()}]")
-                print(f"    Scale: {float(scale):.6f}")
-                shown += 1
+        # Show sample quantized weights
+        print("Sample quantized weights:")
+        shown = 0
+        for name, weight in np_weights.items():
+            if weight.dtype == np.int8 and shown < 3:
+                scale_name = f"{name}.__scale__"
+                if scale_name in np_weights:
+                    scale = np_weights[scale_name]
+                    print(f"  {name}:")
+                    print(f"    Shape: {weight.shape}")
+                    print(f"    Dtype: {weight.dtype}")
+                    print(f"    Range: [{weight.min()}, {weight.max()}]")
+                    print(f"    Scale: {float(scale):.6f}")
+                    shown += 1
 
 
 def test_model_loading(model_path: str, verbose: bool = False):
@@ -149,7 +150,7 @@ def test_model_loading(model_path: str, verbose: bool = False):
     try:
         weights, config, tokenizer = load_mlx_model(model_path)
 
-        print(f"✓ Successfully loaded model")
+        print(f"Successfully loaded model")
         print(f"  - Config: {config.get('model_type', 'unknown')} ({config.get('_name_or_path', 'N/A')})")
         print(f"  - Weights: {len(weights)} parameters")
         print(f"  - Tokenizer: {len(tokenizer)} tokens")
@@ -161,9 +162,17 @@ def test_model_loading(model_path: str, verbose: bool = False):
                 metadata = json.load(f)
 
             print(f"  - Quantization: {metadata['quantization']['bits']}-bit ({metadata['quantization']['dtype']})")
-            print(f"  - Original size: {metadata['quantization']['original_size_mb']:.1f}MB")
-            print(f"  - Quantized size: {metadata['quantization']['actual_size_mb']:.1f}MB")
-            print(f"  - Compression: {metadata['quantization']['compression_ratio']:.2f}x")
+
+            # Handle old metadata that may be missing some fields
+            if 'original_size_mb' in metadata['quantization']:
+                print(f"  - Original size: {metadata['quantization']['original_size_mb']:.1f}MB")
+                print(f"  - Quantized size: {metadata['quantization']['actual_size_mb']:.1f}MB")
+                if 'compression_ratio' in metadata['quantization']:
+                    print(f"  - Compression: {metadata['quantization']['compression_ratio']:.2f}x")
+            else:
+                # Old metadata without original_size_mb
+                print(f"  - Quantized size: {metadata['quantization']['actual_size_mb']:.1f}MB")
+
             print(f"  - Converted: {metadata['timestamp']}")
             print(f"  - Converter: {metadata.get('converter_version', 'v1')}")
 
@@ -191,7 +200,7 @@ def test_tokenization(model_path: str, text: str = "This is a test sentence."):
         # Tokenize
         inputs = tokenizer(text, return_tensors="np", padding=True, truncation=True)
 
-        print(f"✓ Tokenization successful")
+        print(f"Tokenization successful")
         print(f"  - Input IDs shape: {inputs['input_ids'].shape}")
         print(f"  - Tokens: {tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])[:10]}...")
 
@@ -230,7 +239,7 @@ def test_embedding_extraction(model_path: str, text: str = "This is a test sente
         embedding_key = embedding_keys[0]
         embeddings = weights[embedding_key]
 
-        print(f"✓ Found embeddings layer: {embedding_key}")
+        print(f"Found embeddings layer: {embedding_key}")
         print(f"  - Embedding shape: {embeddings.shape}")
         print(f"  - Vocab size: {embeddings.shape[0]}")
         print(f"  - Hidden size: {embeddings.shape[1]}")
@@ -298,9 +307,9 @@ def main():
 
     print("\n" + "="*60)
     if success:
-        print("✓ All tests passed!")
+        print("All tests passed")
     else:
-        print("✗ Some tests failed")
+        print("Some tests failed")
     print("="*60)
 
     return 0 if success else 1

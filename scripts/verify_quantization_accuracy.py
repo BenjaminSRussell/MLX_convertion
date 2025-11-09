@@ -31,7 +31,6 @@ def load_mlx_weights(model_path: Path) -> Dict[str, np.ndarray]:
     if not weights_file.exists():
         raise FileNotFoundError(f"Weights file not found: {weights_file}")
 
-    np_weights = np.load(weights_file)
     dequantized_weights = {}
 
     # Get metadata
@@ -39,22 +38,23 @@ def load_mlx_weights(model_path: Path) -> Dict[str, np.ndarray]:
     with open(metadata_file, 'r') as f:
         metadata = json.load(f)
 
-    # Dequantize INT8 weights
-    weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
+    # Load and dequantize INT8 weights with proper resource management
+    with np.load(weights_file) as np_weights:
+        weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
 
-    for name in weight_names:
-        weight = np_weights[name]
+        for name in weight_names:
+            weight = np_weights[name]
 
-        # Check if quantized
-        scale_name = f"{name}.__scale__"
-        if scale_name in np_weights:
-            # Dequantize: w_fp32 = w_int8 * scale
-            scale = float(np_weights[scale_name])
-            weight_dequant = weight.astype(np.float32) * scale
-            dequantized_weights[name] = weight_dequant
-        else:
-            # Not quantized (embeddings, norms, biases)
-            dequantized_weights[name] = weight.astype(np.float32)
+            # Check if quantized
+            scale_name = f"{name}.__scale__"
+            if scale_name in np_weights:
+                # Dequantize: w_fp32 = w_int8 * scale
+                scale = float(np_weights[scale_name])
+                weight_dequant = weight.astype(np.float32) * scale
+                dequantized_weights[name] = weight_dequant
+            else:
+                # Not quantized (embeddings, norms, biases)
+                dequantized_weights[name] = weight.astype(np.float32)
 
     return dequantized_weights, metadata
 
@@ -172,7 +172,8 @@ def print_comparison_report(results: Dict[str, Any], metadata: Dict[str, Any]):
     print(f"Model: {metadata['model_name']}")
     print(f"Architecture: {metadata['architecture']}")
     print(f"Quantization: {metadata['quantization']['bits']}-bit ({metadata['quantization']['dtype']})")
-    print(f"Method: {metadata['quantization']['method']}")
+    method = metadata['quantization'].get('method', 'symmetric')  # Default to symmetric for old metadata
+    print(f"Method: {method}")
     print()
 
     overall = results['overall']
@@ -212,19 +213,19 @@ def print_comparison_report(results: Dict[str, Any], metadata: Dict[str, Any]):
 
     status = []
     if overall['mse_mean'] < expected_8bit['mse']:
-        status.append("✓ MSE is within expected range for 8-bit quantization")
+        status.append("PASS: MSE is within expected range for 8-bit quantization")
     else:
-        status.append("⚠️  MSE is higher than expected")
+        status.append("WARNING: MSE is higher than expected")
 
     if overall['relative_error_mean'] < expected_8bit['relative_error']:
-        status.append("✓ Relative error is within expected range (<1%)")
+        status.append("PASS: Relative error is within expected range (<1%)")
     else:
-        status.append("⚠️  Relative error is higher than expected")
+        status.append("WARNING: Relative error is higher than expected")
 
     if overall['max_error_max'] < 0.1:
-        status.append("✓ Max absolute error is acceptably small")
+        status.append("PASS: Max absolute error is acceptably small")
     else:
-        status.append("⚠️  Max absolute error is larger than expected")
+        status.append("WARNING: Max absolute error is larger than expected")
 
     for s in status:
         print(s)
@@ -232,13 +233,13 @@ def print_comparison_report(results: Dict[str, Any], metadata: Dict[str, Any]):
 
     # Overall verdict
     if overall['relative_error_mean'] < 0.01 and overall['mse_mean'] < 1e-4:
-        print("✓✓✓ EXCELLENT: Quantization is high quality with minimal error")
+        print("EXCELLENT: Quantization is high quality with minimal error")
     elif overall['relative_error_mean'] < 0.02:
-        print("✓✓ GOOD: Quantization error is acceptable")
+        print("GOOD: Quantization error is acceptable")
     elif overall['relative_error_mean'] < 0.05:
-        print("✓ ACCEPTABLE: Quantization error is within reasonable bounds")
+        print("ACCEPTABLE: Quantization error is within reasonable bounds")
     else:
-        print("✗ POOR: Quantization error is too high")
+        print("POOR: Quantization error is too high")
     print()
 
     # Show worst layers
@@ -310,8 +311,8 @@ def main():
         mlx_weights, metadata = load_mlx_weights(mlx_path)
         hf_weights = load_hf_weights(metadata['hf_name'])
 
-        print(f"✓ Loaded {len(hf_weights)} HF weights")
-        print(f"✓ Loaded {len(mlx_weights)} MLX weights")
+        print(f"Loaded {len(hf_weights)} HF weights")
+        print(f"Loaded {len(mlx_weights)} MLX weights")
 
         # Compare
         results = compare_weights(hf_weights, mlx_weights)
@@ -327,12 +328,12 @@ def main():
             }
             with open(args.output, 'w') as f:
                 json.dump(output_data, f, indent=2)
-            print(f"\n✓ Results saved to: {args.output}")
+            print(f"\nResults saved to: {args.output}")
 
         return 0
 
     except Exception as e:
-        print(f"\n✗ ERROR: {str(e)}", file=sys.stderr)
+        print(f"\nERROR: {str(e)}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         return 1

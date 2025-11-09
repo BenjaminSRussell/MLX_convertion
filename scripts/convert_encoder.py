@@ -48,77 +48,56 @@ def setup_logging(model_name=None):
 
 def quantize_weights_int8(
     weights: Dict[str, mx.array],
-    bits: int = 8,
-    group_size: int = 64
+    bits: int = 8
 ) -> Dict[str, np.ndarray]:
     """
-    Quantize model weights to INT8 with ACTUAL size reduction.
-
-    This function performs TRUE quantization by storing weights as int8
-    instead of dequantizing back to float32.
+    Quantize model weights to int8/int4 for size reduction.
 
     Args:
-        weights: Dictionary of weight tensors (MLX arrays)
+        weights: Dictionary of weight tensors
         bits: Number of bits for quantization (4 or 8)
-        group_size: Group size for group-wise quantization
 
     Returns:
-        Dictionary with quantized weights (int8/int4), scales, and zero-points
+        Dictionary with quantized weights and scales
     """
     quantized_data = {}
 
     for name, weight in weights.items():
-        # Convert MLX array to numpy for processing
         weight_np = np.array(weight)
 
-        # Skip quantization for certain layers (embeddings, layer norms, biases)
+        # Skip embeddings, layer norms, biases
         if any(skip in name.lower() for skip in ['embedding', 'layernorm', 'bias', 'norm', 'ln']):
-            # Store as float32 (no quantization)
             quantized_data[name] = weight_np.astype(np.float32)
             continue
 
-        # Only quantize 2D weight matrices (linear layers)
+        # Only quantize 2D matrices
         if len(weight_np.shape) != 2:
             quantized_data[name] = weight_np.astype(np.float32)
             continue
 
-        # Perform INT8 quantization
         if bits == 8:
-            # Symmetric quantization to [-127, 127] (reserve -128 for special use)
-            w_max = np.maximum(np.abs(weight_np.max()), np.abs(weight_np.min()))
+            # Symmetric quantization to [-127, 127]
+            w_max = np.abs(weight_np).max()
+            scale = w_max / 127.0 if w_max > 0 else 1.0
 
-            # Calculate scale (max value that can be represented)
-            scale = w_max / 127.0
-
-            # Avoid division by zero
-            if scale == 0:
-                scale = 1.0
-
-            # Quantize: w_int8 = round(w_fp32 / scale)
             w_quant = np.round(weight_np / scale)
             w_quant = np.clip(w_quant, -127, 127).astype(np.int8)
 
-            # Store quantized weight as INT8 (1 byte per element)
             quantized_data[name] = w_quant
             quantized_data[f"{name}.__scale__"] = np.array(scale, dtype=np.float32)
-            # No zero-point needed for symmetric quantization
 
         elif bits == 4:
-            # 4-bit quantization (symmetric, range [-7, 7])
-            w_max = np.maximum(np.abs(weight_np.max()), np.abs(weight_np.min()))
-            scale = w_max / 7.0
-
-            if scale == 0:
-                scale = 1.0
+            # Symmetric quantization to [-7, 7]
+            w_max = np.abs(weight_np).max()
+            scale = w_max / 7.0 if w_max > 0 else 1.0
 
             w_quant = np.round(weight_np / scale)
-            w_quant = np.clip(w_quant, -7, 7).astype(np.int8)  # Store as int8 but only use 4 bits
+            w_quant = np.clip(w_quant, -7, 7).astype(np.int8)
 
             quantized_data[name] = w_quant
             quantized_data[f"{name}.__scale__"] = np.array(scale, dtype=np.float32)
 
         else:
-            # No quantization, keep as float32
             quantized_data[name] = weight_np.astype(np.float32)
 
     return quantized_data
@@ -153,6 +132,77 @@ def calculate_model_size(weights: Dict[str, np.ndarray]) -> float:
     """Calculate total model size in MB."""
     total_bytes = sum(w.nbytes for w in weights.values())
     return total_bytes / (1024 * 1024)
+
+
+def migrate_old_metadata(metadata: Dict[str, Any], output_path: Path) -> Dict[str, Any]:
+    """
+    Migrate old metadata to include missing fields.
+
+    Args:
+        metadata: Existing metadata dictionary
+        output_path: Path to the converted model
+
+    Returns:
+        Updated metadata dictionary
+    """
+    updated = False
+
+    # Ensure 'method' field exists
+    if 'method' not in metadata.get('quantization', {}):
+        if 'quantization' not in metadata:
+            metadata['quantization'] = {}
+        metadata['quantization']['method'] = 'symmetric'
+        updated = True
+
+    # Calculate original_size_mb if missing
+    if 'original_size_mb' not in metadata.get('quantization', {}):
+        weights_file = output_path / 'weights.npz'
+        if weights_file.exists():
+            try:
+                with np.load(weights_file) as np_weights:
+                    quantized_params = 0
+                    unquantized_params = 0
+
+                    for key in np_weights.keys():
+                        if key.endswith('.__scale__'):
+                            continue
+                        weight = np_weights[key]
+                        if f"{key}.__scale__" in np_weights:
+                            quantized_params += weight.size
+                        else:
+                            unquantized_params += weight.size
+
+                    # All params are fp32 originally (4 bytes each)
+                    original_bytes = (quantized_params + unquantized_params) * 4
+                    original_size_mb = original_bytes / (1024 * 1024)
+
+                metadata['quantization']['original_size_mb'] = original_size_mb
+                updated = True
+            except Exception:
+                pass
+
+    # Recalculate compression ratio if both sizes available
+    if 'original_size_mb' in metadata['quantization'] and 'actual_size_mb' in metadata['quantization']:
+        original = metadata['quantization']['original_size_mb']
+        actual = metadata['quantization']['actual_size_mb']
+        if actual > 0:
+            new_ratio = original / actual
+            if 'compression_ratio' not in metadata['quantization'] or \
+               abs(metadata['quantization']['compression_ratio'] - new_ratio) > 0.01:
+                metadata['quantization']['compression_ratio'] = new_ratio
+                updated = True
+
+    if 'converter_version' not in metadata:
+        metadata['converter_version'] = 'v1'
+        updated = True
+
+    # Save updated metadata if changes were made
+    if updated:
+        metadata_file = output_path / 'conversion_metadata.json'
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+    return metadata
 
 
 def save_mlx_model(
@@ -203,34 +253,32 @@ def load_quantized_weights(weights_file: Path) -> Dict[str, mx.array]:
     Returns:
         Dictionary of dequantized MLX arrays ready for inference
     """
-    # Load all weights
-    np_weights = np.load(weights_file)
     mlx_weights = {}
 
-    # Separate regular weights from scale/zero-point metadata
-    weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
+    # Load all weights with proper resource management
+    with np.load(weights_file) as np_weights:
+        # Separate regular weights from scale/zero-point metadata
+        weight_names = [k for k in np_weights.keys() if not k.endswith('.__scale__')]
 
-    for name in weight_names:
-        weight = np_weights[name]
+        for name in weight_names:
+            weight = np_weights[name]
 
-        # Check if this weight was quantized
-        scale_name = f"{name}.__scale__"
-        if scale_name in np_weights:
-            # This was a quantized weight, dequantize it
-            scale = float(np_weights[scale_name])
+            # Check if this weight was quantized
+            scale_name = f"{name}.__scale__"
+            if scale_name in np_weights:
+                # This was a quantized weight, dequantize it
+                scale = float(np_weights[scale_name])
 
-            # Dequantize: w_fp32 = w_int8 * scale
-            weight_dequant = weight.astype(np.float32) * scale
-            mlx_weights[name] = mx.array(weight_dequant)
-        else:
-            # Not quantized, use as-is
-            mlx_weights[name] = mx.array(weight)
+                weight_dequant = weight.astype(np.float32) * scale
+                mlx_weights[name] = mx.array(weight_dequant)
+            else:
+                mlx_weights[name] = mx.array(weight)
 
     return mlx_weights
 
 
 class EncoderModelConverter:
-    """Encoder model converter with TRUE INT8 quantization"""
+    """Encoder model converter with int8 quantization"""
 
     def __init__(
         self,
@@ -276,6 +324,10 @@ class EncoderModelConverter:
                 logger.info(f"Skipping {model_name} - already converted at {output_path}")
                 with open(metadata_file, 'r') as f:
                     existing_metadata = json.load(f)
+
+                # Migrate old metadata to include missing fields
+                existing_metadata = migrate_old_metadata(existing_metadata, output_path)
+
                 return {
                     'success': True,
                     'skipped': True,
@@ -307,37 +359,29 @@ class EncoderModelConverter:
             logger.info("Converting PyTorch weights to MLX format")
             mlx_weights = convert_pytorch_to_mlx(hf_model.state_dict())
 
-            # Get original size (for comparison)
             original_size_mb = sum(
                 np.array(v).nbytes for v in mlx_weights.values()
             ) / (1024 * 1024)
 
-            # Apply TRUE quantization with INT8 storage
             if quant_config['bits'] < 32:
-                logger.info(f"Applying TRUE {quant_config['bits']}-bit quantization (INT8 storage)")
+                logger.info(f"Applying {quant_config['bits']}-bit quantization")
                 quantized_weights = quantize_weights_int8(
                     mlx_weights,
-                    bits=quant_config['bits'],
-                    group_size=quant_config.get('group_size', 64)
+                    bits=quant_config['bits']
                 )
             else:
-                # No quantization
-                logger.info("No quantization (fp32)")
+                logger.info("No quantization")
                 quantized_weights = {k: np.array(v) for k, v in mlx_weights.items()}
 
-            # Calculate actual size
             quantized_size_mb = calculate_model_size(quantized_weights)
 
-            # Prepare config dict
             config_dict = config.to_dict()
             config_dict['quantization'] = {
                 'bits': quant_config['bits'],
-                'group_size': quant_config.get('group_size', 64),
                 'dtype': 'int8' if quant_config['bits'] <= 8 else quant_config['dtype'],
                 'method': 'symmetric'
             }
 
-            # Save model
             logger.info(f"Saving MLX model to {output_path}")
 
             duration = time.time() - start_time
@@ -360,7 +404,7 @@ class EncoderModelConverter:
                 'timestamp': datetime.now().isoformat(),
                 'mlx_version': mx.__version__,
                 'device': str(mx.default_device()),
-                'size_accuracy_ratio': quantized_size_mb / quant_config['target_size_mb'],
+                'size_target_ratio': quantized_size_mb / quant_config['target_size_mb'] if quant_config['target_size_mb'] > 0 else 0.0,
                 'converter_version': 'v2'
             }
 
