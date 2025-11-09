@@ -12,6 +12,8 @@ import mlx.core as mx
 import concurrent.futures
 import glob
 import shutil
+from mlx_lm import convert as mlx_convert
+import mlx.nn as nn
 
 
 def setup_logging(model_name=None):
@@ -70,10 +72,8 @@ class Bit8ModelConverter:
 
         logger.info(f"Starting conversion: {model_name}")
 
-        # Create output directory
         output_path = self.output_dir / f"{model_name}-mlx-q{quant_config['bits']}"
 
-        # Check if model already exists and skip if requested
         if self.skip_existing and output_path.exists():
             metadata_file = output_path / 'conversion_metadata.json'
             if metadata_file.exists():
@@ -88,73 +88,42 @@ class Bit8ModelConverter:
                 }
 
         if output_path.exists():
-
             logger.info(f"Removing incomplete conversion at {output_path}")
-
             shutil.rmtree(output_path)
 
- 
-
-        # Ensure parent directory exists, but let mlx_lm.convert create the model directory
-
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Build conversion command
-        cmd = [
-            'python', '-m', 'mlx_lm.convert',
-            '--hf-path', model_config['hf_name'],
-            '--mlx-path', str(output_path),
-            '--quantize',
-            '--q-bits', str(quant_config['bits']),
-            '--q-group-size', str(quant_config.get('group_size', 64))
-        ]
-        
-        logger.info(f"Running command: {' '.join(cmd)}")
-        
+
+        def exclude_predicate(path: str, module: nn.Module) -> bool:
+            if "ffn.lin2" in path:
+                logger.info(f"Excluding layer from quantization: {path}")
+                return False
+            return True
+
         if self.dry_run:
             logger.info("Dry-run enabled, skipping execution")
-            return {
-                'success': True,
-                'dry_run': True,
-                'command': ' '.join(cmd)
-            }
-        
+            cmd_str = (
+                f"mlx_lm.convert.convert(hf_path='{model_config['hf_name']}', "
+                f"mlx_path='{str(output_path)}', quantize=True, "
+                f"q_bits={quant_config['bits']}, "
+                f"q_group_size={quant_config.get('group_size', 64)}, "
+                f"quant_predicate=exclude_predicate)"
+            )
+            return {'success': True, 'dry_run': True, 'command': cmd_str}
+
         try:
-            # Execute conversion with progress
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1
+            logger.info("Starting model conversion via Python API with layer exclusion")
+            mlx_convert(
+                hf_path=model_config['hf_name'],
+                mlx_path=str(output_path),
+                quantize=True,
+                q_bits=quant_config['bits'],
+                q_group_size=quant_config.get('group_size', 64),
+                quant_predicate=exclude_predicate,
             )
             
-            # Stream output for progress monitoring
-            while True:
-                output = process.stdout.readline()
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    logger.info(output.strip())
-            
-            stderr = process.stderr.read()
-            return_code = process.poll()
-            
-            if return_code != 0:
-                logger.error(f"Conversion failed with return code {return_code}")
-                logger.error(f"Error output: {stderr}")
-                return {
-                    'success': False,
-                    'error': stderr,
-                    'return_code': return_code
-                }
-            
             duration = time.time() - start_time
-            
-            # Get model size
             model_size_mb = sum(f.stat().st_size for f in output_path.glob('**/*') if f.is_file()) / (1024 * 1024)
             
-            # Save conversion metadata
             metadata = {
                 'model_name': model_name,
                 'hf_name': model_config['hf_name'],
@@ -162,10 +131,10 @@ class Bit8ModelConverter:
                     'bits': quant_config['bits'],
                     'dtype': quant_config['dtype'],
                     'target_size_mb': quant_config['target_size_mb'],
-                    'actual_size_mb': model_size_mb
+                    'actual_size_mb': model_size_mb,
+                    'excluded_layers': ["ffn.lin2"],
                 },
                 'conversion_time_seconds': duration,
-                'conversion_command': ' '.join(cmd),
                 'timestamp': datetime.now().isoformat(),
                 'mlx_version': mx.__version__,
                 'device': str(mx.default_device()),
@@ -187,6 +156,8 @@ class Bit8ModelConverter:
             
         except Exception as e:
             logger.error(f"Unexpected error during conversion: {str(e)}")
+            if output_path.exists():
+                shutil.rmtree(output_path)
             return {
                 'success': False,
                 'error': str(e)

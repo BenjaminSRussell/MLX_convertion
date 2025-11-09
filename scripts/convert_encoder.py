@@ -65,8 +65,8 @@ def quantize_weights_int8(
     for name, weight in weights.items():
         weight_np = np.array(weight)
 
-        # Skip embeddings, layer norms, biases
-        if any(skip in name.lower() for skip in ['embedding', 'layernorm', 'bias', 'norm', 'ln']):
+        # Skip embeddings, layer norms, biases, and problematic ffn layers
+        if any(skip in name.lower() for skip in ['embedding', 'layernorm', 'bias', 'norm', 'ln', 'ffn.lin2']):
             quantized_data[name] = weight_np.astype(np.float32)
             continue
 

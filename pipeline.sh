@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --models)
       shift
-      MODELS=($1)
+      IFS=' ' read -r -a MODELS <<< "$1"
       ;;
     --datasets)
       shift
@@ -73,14 +73,25 @@ clear_cache() {
 
 run_convert() {
   echo "[pipeline] Starting conversion jobs"
-  ARGS=()
-  if [[ -n "$DRY_RUN" ]]; then
-    ARGS+=("$DRY_RUN")
+  if [[ ${#MODELS[@]} -eq 0 ]]; then
+    echo "[pipeline] No models specified. Running for all models in config."
+    local convert_args=()
+    if [[ -n "$DRY_RUN" ]]; then
+      convert_args+=("--dry-run")
+    fi
+    PYTHONPATH="$ROOT_DIR" python "$SCRIPTS_DIR/convert.py" "${convert_args[@]}"
+    return
   fi
-  if [[ ${#MODELS[@]} -gt 0 ]]; then
-    ARGS+=("--models" "$@")
-  fi
-  PYTHONPATH="$ROOT_DIR" python "$SCRIPTS_DIR/convert.py" "${ARGS[@]}"
+
+  for model in "${MODELS[@]}"; do
+    echo "[pipeline] Converting model: $model"
+    local convert_args=()
+    if [[ -n "$DRY_RUN" ]]; then
+      convert_args+=("--dry-run")
+    fi
+    convert_args+=("--model" "$model")
+    PYTHONPATH="$ROOT_DIR" python "$SCRIPTS_DIR/convert.py" "${convert_args[@]}"
+  done
 }
 
 run_tests() {
@@ -112,6 +123,6 @@ run_upload() {
 }
 
 clear_cache
-run_convert "${MODELS[@]}"
+run_convert
 run_tests "${MODELS[@]}"
 run_upload
