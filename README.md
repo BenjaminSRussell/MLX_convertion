@@ -23,19 +23,33 @@ pip install -r requirements.txt
 
 ### 2. Convert Models
 
+**Important**: The standard `convert.py` script uses `mlx_lm` which only supports language models (GPT, Llama, etc.). For encoder models (BERT, RoBERTa, etc.), use `convert_encoder.py` instead.
+
+#### For Language Models (Decoder-only/Encoder-Decoder):
 ```bash
 # Convert all models in config/models.yaml
 ./pipeline.sh
 
 # Convert specific model
-python scripts/convert.py --model distilbert-base-uncased-mnli
-
-# Convert models from multiple YAML files
-python scripts/convert.py --config "config/*.yaml"
+python scripts/convert.py --model model-name
 
 # Dry-run (show commands without executing)
 python scripts/convert.py --dry-run
 ```
+
+#### For Encoder Models (BERT, RoBERTa, DistilBERT, etc.):
+```bash
+# Convert encoder model with quick test
+./test_encoder_conversion.sh distilbert-base-uncased-mnli
+
+# Or convert manually
+python scripts/convert_encoder.py --model distilbert-base-uncased-mnli
+
+# Test converted encoder model
+python scripts/test_encoder.py models/mlx_converted/distilbert-base-uncased-mnli-mlx-q8
+```
+
+**See [docs/ENCODER_MODELS.md](docs/ENCODER_MODELS.md) for detailed encoder model documentation.**
 
 ### 3. Test Models
 
@@ -227,6 +241,21 @@ Converted models must pass all quality gates:
 - **Size Gate**: Within ±10% of target size
 
 ## Troubleshooting
+
+### "Model type not supported" Error
+
+```
+ValueError: Model type distilbert not supported.
+```
+
+**Cause**: You're trying to convert an encoder model with `convert.py`, which only supports language models.
+
+**Solution**: Use `convert_encoder.py` for encoder models (BERT, RoBERTa, DistilBERT, etc.):
+```bash
+python scripts/convert_encoder.py --model distilbert-base-uncased-mnli
+```
+
+See [docs/ENCODER_MODELS.md](docs/ENCODER_MODELS.md) for details.
 
 ### Model Not Found Error
 
