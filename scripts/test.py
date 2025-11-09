@@ -124,7 +124,7 @@ class Bit8ModelTester:
         """Load dataset for testing with reasonable size for speed"""
         config = self.datasets_config['datasets'][dataset_name]
 
-        logger.info(f"📥 Loading test dataset: {dataset_name}")
+        logger.info(f"Loading test dataset: {dataset_name}")
 
         try:
             # Determine cache directory
@@ -155,16 +155,16 @@ class Bit8ModelTester:
                 indices = np.random.choice(len(dataset), sample_size, replace=False)
                 dataset = dataset.select(indices)
             
-            logger.info(f"✅ Loaded {len(dataset)} examples from {dataset_name}")
+            logger.info(f"Loaded {len(dataset)} examples from {dataset_name}")
             return dataset
             
         except Exception as e:
-            logger.error(f"❌ Failed to load dataset {dataset_name}: {str(e)}")
+            logger.error(f"Failed to load dataset {dataset_name}: {str(e)}")
             raise
     
     def test_pytorch_baseline(self, model_name, task, dataset_name, dataset):
         """Test original PyTorch model as baseline - optimized for speed"""
-        logger.info(f"⚡ Testing PyTorch baseline: {model_name} on {dataset_name}")
+        logger.info(f"Testing PyTorch baseline: {model_name} on {dataset_name}")
 
         start_time = time.time()
         predictions = []
@@ -270,10 +270,10 @@ class Bit8ModelTester:
             predictions, references, latencies, total_tokens, duration, model_size_mb, memory_samples
         )
 
-        logger.info(f"✅ PyTorch baseline completed in {duration:.2f} seconds")
-        logger.info(f"📊 Accuracy: {metrics['accuracy']:.4f}, Speed: {metrics['qpm']:.1f} QPM")
-        logger.info(f"🚀 Tokens/sec: {metrics['tokens_per_sec']:.1f}, Memory: {metrics['memory_peak_mb']:.1f}MB peak")
-        logger.info(f"⏱️  Latency p50/p95/p99: {metrics['latency_p50_ms']:.1f}/{metrics['latency_p95_ms']:.1f}/{metrics['latency_p99_ms']:.1f}ms")
+        logger.info(f"PyTorch baseline completed in {duration:.2f} seconds")
+        logger.info(f"Accuracy: {metrics['accuracy']:.4f}, Speed: {metrics['qpm']:.1f} QPM")
+        logger.info(f"Tokens/sec: {metrics['tokens_per_sec']:.1f}, Memory: {metrics['memory_peak_mb']:.1f}MB peak")
+        logger.info(f"Latency p50/p95/p99: {metrics['latency_p50_ms']:.1f}/{metrics['latency_p95_ms']:.1f}/{metrics['latency_p99_ms']:.1f}ms")
 
         return {
             **metrics,
@@ -285,7 +285,7 @@ class Bit8ModelTester:
     
     def test_mlx_8bit_model(self, model_path, model_config, dataset_name, dataset):
         """Test 8-bit MLX model"""
-        logger.info(f"🚀 Testing MLX 8-bit model: {model_path} on {dataset_name}")
+        logger.info(f"Testing MLX 8-bit model: {model_path} on {dataset_name}")
 
         start_time = time.time()
         predictions = []
@@ -303,7 +303,7 @@ class Bit8ModelTester:
         
         if task == "zero-shot-classification":
             # Simplified zero-shot for MLX (placeholder - implement proper version)
-            logger.warning("⚠️ MLX zero-shot classification needs custom implementation")
+            logger.warning("MLX zero-shot classification needs custom implementation")
             # For now, return reasonable defaults
             accuracy = 0.85  # Placeholder
             duration = 2.0   # Placeholder
@@ -363,10 +363,10 @@ class Bit8ModelTester:
             predictions, references, latencies, total_tokens, duration, model_size_mb, memory_samples
         )
 
-        logger.info(f"✅ MLX 8-bit testing completed in {duration:.2f} seconds")
-        logger.info(f"📊 Accuracy: {metrics['accuracy']:.4f}, Speed: {metrics['qpm']:.1f} QPM")
-        logger.info(f"🚀 Tokens/sec: {metrics['tokens_per_sec']:.1f}, Memory: {metrics['memory_peak_mb']:.1f}MB peak")
-        logger.info(f"⏱️  Latency p50/p95/p99: {metrics['latency_p50_ms']:.1f}/{metrics['latency_p95_ms']:.1f}/{metrics['latency_p99_ms']:.1f}ms")
+        logger.info(f"MLX 8-bit testing completed in {duration:.2f} seconds")
+        logger.info(f"Accuracy: {metrics['accuracy']:.4f}, Speed: {metrics['qpm']:.1f} QPM")
+        logger.info(f"Tokens/sec: {metrics['tokens_per_sec']:.1f}, Memory: {metrics['memory_peak_mb']:.1f}MB peak")
+        logger.info(f"Latency p50/p95/p99: {metrics['latency_p50_ms']:.1f}/{metrics['latency_p95_ms']:.1f}/{metrics['latency_p99_ms']:.1f}ms")
 
         return {
             **metrics,
@@ -378,12 +378,12 @@ class Bit8ModelTester:
     
     def compare_models(self, model_name, dataset_name):
         """Compare original PyTorch model with 8-bit MLX model"""
-        logger.info(f"🔍 Comparing {model_name} (8-bit) on {dataset_name}")
+        logger.info(f"Comparing {model_name} (8-bit) on {dataset_name}")
         
         # Find model config
         model_config = next((m for m in self.models_config['models'] if m['name'] == model_name), None)
         if not model_config:
-            logger.error(f"❌ Model '{model_name}' not found in config")
+            logger.error(f"Model '{model_name}' not found in config")
             return None
         
         # Load dataset
@@ -401,8 +401,8 @@ class Bit8ModelTester:
         quant_bits = model_config['quantization']['bits']
         mlx_path = f"models/mlx_converted/{model_name}-mlx-q{quant_bits}"
         if not Path(mlx_path).exists():
-            logger.error(f"❌ MLX model not found at {mlx_path}")
-            logger.info(f"💡 Make sure to run conversion first: python scripts/convert.py --model {model_name}")
+            logger.error(f"MLX model not found at {mlx_path}")
+            logger.info(f"Make sure to run conversion first: python scripts/convert.py --model {model_name}")
             return None
         
         mlx_results = self.test_mlx_8bit_model(mlx_path, model_config, dataset_name, dataset)
@@ -439,23 +439,23 @@ class Bit8ModelTester:
         with open(comparison_file, 'w') as f:
             json.dump(comparison, f, indent=2)
         
-        logger.info(f"💾 Comparison saved to {comparison_file}")
+        logger.info(f"Comparison saved to {comparison_file}")
         
         # Log quality gate results
         if comparison['quality_gates']['all_passed']:
-            logger.info(f"✅ All quality gates passed for {model_name} on {dataset_name}")
+            logger.info(f"All quality gates passed for {model_name} on {dataset_name}")
         else:
-            logger.warning(f"⚠️ Quality gates failed for {model_name} on {dataset_name}")
+            logger.warning(f"Quality gates failed for {model_name} on {dataset_name}")
             for gate, passed in comparison['quality_gates'].items():
                 if gate != 'all_passed':
-                    status = "✅" if passed else "❌"
+                    status = "PASS" if passed else "FAIL"
                     logger.warning(f"  {status} {gate.replace('_passed', '')} gate")
         
         return comparison
     
     def test_all_models(self):
         """Test all 8-bit models against their benchmarks"""
-        logger.info("🎯 Starting comprehensive 8-bit model testing")
+        logger.info("Starting comprehensive 8-bit model testing")
         
         all_results = {}
         
@@ -468,7 +468,7 @@ class Bit8ModelTester:
             logger.info(f"{'='*60}")
             
             for dataset_name in model_config['benchmarks']:
-                logger.info(f"🧪 Testing on dataset: {dataset_name}")
+                logger.info(f"Testing on dataset: {dataset_name}")
                 
                 try:
                     comparison = self.compare_models(model_name, dataset_name)
@@ -480,7 +480,7 @@ class Bit8ModelTester:
                             json.dump(all_results, f, indent=2)
                 
                 except Exception as e:
-                    logger.error(f"💥 Failed to test {model_name} on {dataset_name}: {str(e)}")
+                    logger.error(f"Failed to test {model_name} on {dataset_name}: {str(e)}")
                     all_results[model_name][dataset_name] = {
                         'error': str(e),
                         'failed': True
@@ -494,7 +494,7 @@ class Bit8ModelTester:
         with open(summary_file, 'w') as f:
             json.dump(all_results, f, indent=2)
         
-        logger.info(f"📊 Testing summary saved to {summary_file}")
+        logger.info(f"Testing summary saved to {summary_file}")
         
         # Print summary
         logger.info(f"\n{'='*60}")
@@ -502,11 +502,11 @@ class Bit8ModelTester:
         logger.info(f"{'='*60}")
         
         for model_name, datasets in all_results.items():
-            logger.info(f"\n📈 Model: {model_name}")
+            logger.info(f"\nModel: {model_name}")
             for dataset_name, result in datasets.items():
                 if 'quality_gates' in result:
                     gates = result['quality_gates']
-                    status = "✅ PASSED" if gates['all_passed'] else "❌ FAILED"
+                    status = "PASSED" if gates['all_passed'] else "FAILED"
                     logger.info(f"  {dataset_name}: {status}")
                     logger.info(f"    Accuracy drop: {result['accuracy_drop']:.4f} (max allowed: {model_config['quantization']['max_accuracy_drop']:.4f})")
                     logger.info(f"    Speedup: {result['speedup']:.2f}x")

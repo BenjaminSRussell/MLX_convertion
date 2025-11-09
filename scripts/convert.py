@@ -75,7 +75,7 @@ class Bit8ModelConverter:
         if self.skip_existing and output_path.exists():
             metadata_file = output_path / 'conversion_metadata.json'
             if metadata_file.exists():
-                logger.info(f"⏭️  Skipping {model_name} - already converted at {output_path}")
+                logger.info(f"Skipping {model_name} - already converted at {output_path}")
                 with open(metadata_file, 'r') as f:
                     existing_metadata = json.load(f)
                 return {
@@ -97,10 +97,10 @@ class Bit8ModelConverter:
             '--q-group-size', str(quant_config.get('group_size', 64))
         ]
         
-        logger.info(f"🔧 Running command: {' '.join(cmd)}")
+        logger.info(f"Running command: {' '.join(cmd)}")
         
         if self.dry_run:
-            logger.info("🌵 Dry-run enabled, skipping execution")
+            logger.info("Dry-run enabled, skipping execution")
             return {
                 'success': True,
                 'dry_run': True,

@@ -222,17 +222,17 @@ The pipeline includes 14 pre-configured models:
 
 Converted models must pass all quality gates:
 
-- ✅ **Accuracy Gate**: Drop ≤ configured threshold (typically 1-2%)
-- ✅ **Speed Gate**: ≥1.2x faster than PyTorch baseline
-- ✅ **Size Gate**: Within ±10% of target size
+- **Accuracy Gate**: Drop ≤ configured threshold (typically 1-2%)
+- **Speed Gate**: ≥1.2x faster than PyTorch baseline
+- **Size Gate**: Within ±10% of target size
 
 ## Troubleshooting
 
 ### Model Not Found Error
 
 ```
-❌ MLX model not found at models/mlx_converted/model-name-mlx-q8
-💡 Make sure to run conversion first: python scripts/convert.py --model model-name
+MLX model not found at models/mlx_converted/model-name-mlx-q8
+Make sure to run conversion first: python scripts/convert.py --model model-name
 ```
 
 **Solution**: Convert the model before testing.

@@ -1,6 +1,6 @@
-# MLX (optional - only works on Apple Silicon)
-# mlx>=0.0.4
-# mlx-lm>=0.1.1
+# MLX - required for model conversion (only works on Apple Silicon)
+mlx>=0.0.4
+mlx-lm>=0.1.1
 
 # Core ML/DL frameworks - Version constrained for compatibility
 torch>=2.0.0,<3.0.0
