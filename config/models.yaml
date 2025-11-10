@@ -141,3 +141,63 @@ models:
     benchmarks:
       - sts
       - semantic_similarity
+
+  - name: "microsoft/phi-2"
+    hf_name: "microsoft/phi-2"
+    task: "text-generation"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - wikitext
+      - lambada
+
+text_models:
+  - name: Llama-2-7b
+    path: models/originals/text/Llama-2-7b
+  - name: Mistral-7B
+    path: models/originals/text/Mistral-7B
+  - name: Gemma-7b
+    path: models/originals/text/Gemma-7b
+  - name: Phi-2
+    path: models/originals/text/Phi-2
+  - name: Qwen-7B
+    path: models/originals/text/Qwen-7B
+  - name: Falcon-7B
+    path: models/originals/text/Falcon-7B
+  - name: MPT-7B
+    path: models/originals/text/MPT-7B
+
+vision_models:
+  - name: CLIP-ViT
+    path: models/originals/vision/CLIP-ViT
+  - name: DINOv2
+    path: models/originals/vision/DINOv2
+  - name: ViT-Base
+    path: models/originals/vision/ViT-Base
+  - name: ViT-Large
+    path: models/originals/vision/ViT-Large
+  - name: ResNet-50
+    path: models/originals/vision/ResNet-50
+
+audio_models:
+  - name: whisper-medium
+    path: models/originals/audio/whisper-medium
+  - name: wav2vec2
+    path: models/originals/audio/wav2vec2
+  - name: SpeechT5
+    path: models/originals/audio/SpeechT5
+  - name: MMS-TTS
+    path: models/originals/audio/MMS-TTS
+
+multimodal_models:
+  - name: FLAVA
+    path: models/originals/multimodal/FLAVA
+  - name: BLIP-2
+    path: models/originals/multimodal/BLIP-2
+  - name: LLaVA-7B
+    path: models/originals/multimodal/LLaVA-7B
+  - name: Kosmos-2
+    path: models/originals/multimodal/Kosmos-2

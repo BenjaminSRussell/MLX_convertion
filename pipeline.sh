@@ -20,8 +20,8 @@ Options:
 USAGE
 }
 
-MODELS=""
-DATASETS=""
+MODELS=()
+DATASETS=()
 DRY_RUN=""
 UPLOAD_TARGET=""
 CLEAR_CACHE=""
@@ -101,7 +101,7 @@ run_tests() {
     ARGS+=("$DRY_RUN")
   fi
   if [[ ${#MODELS[@]} -gt 0 ]]; then
-    ARGS+=("--models" "$@")
+    ARGS+=("--models" "${MODELS[@]}")
   fi
   if [[ ${#DATASETS[@]} -gt 0 ]]; then
     ARGS+=("--datasets" "${DATASETS[@]}")
@@ -124,5 +124,5 @@ run_upload() {
 
 clear_cache
 run_convert
-run_tests "${MODELS[@]}"
+run_tests
 run_upload
