@@ -153,6 +153,130 @@ models:
     benchmarks:
       - wikitext
       - lambada
+    phi-2:
+      name: microsoft/phi-2
+      type: causal-lm
+      quantization: 4bit
+      output_dir: models/mlx_converted/phi-2
+
+  - name: "Llama-2-7b"
+    hf_name: "Llama-2-7b"
+    task: "text-generation"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - wikitext
+      - lambada
+    phi-2:
+      name: Llama-2-7b
+      type: causal-lm
+      quantization: 4bit
+      output_dir: models/mlx_converted/Llama-2-7b
+
+  - name: "Mistral-7B"
+    hf_name: "Mistral-7B"
+    task: "text-generation"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - wikitext
+      - lambada
+    phi-2:
+      name: Mistral-7B
+      type: causal-lm
+      quantization: 4bit
+      output_dir: models/mlx_converted/Mistral-7B
+
+  - name: "Gemma-7b"
+    hf_name: "Gemma-7b"
+    task: "text-generation"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - wikitext
+      - lambada
+    phi-2:
+      name: Gemma-7b
+      type: causal-lm
+      quantization: 4bit
+      output_dir: models/mlx_converted/Gemma-7b
+
+  - name: "Phi-2"
+    hf_name: "Phi-2"
+    task: "text-generation"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - wikitext
+      - lambada
+    phi-2:
+      name: Phi-2
+      type: causal-lm
+      quantization: 4bit
+      output_dir: models/mlx_converted/Phi-2
+
+  - name: "Qwen-7B"
+    hf_name: "Qwen-7B"
+    task: "text-generation"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - wikitext
+      - lambada
+    phi-2:
+      name: Qwen-7B
+      type: causal-lm
+      quantization: 4bit
+      output_dir: models/mlx_converted/Qwen-7B
+
+  - name: "Falcon-7B"
+    hf_name: "Falcon-7B"
+    task: "text-generation"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - wikitext
+      - lambada
+    phi-2:
+      name: Falcon-7B
+      type: causal-lm
+      quantization: 4bit
+      output_dir: models/mlx_converted/Falcon-7B
+
+  - name: "MPT-7B"
+    hf_name: "MPT-7B"
+    task: "text-generation"
+    quantization:
+      bits: 8
+      dtype: "int8"
+      target_size_mb: 40
+      max_accuracy_drop: 0.02
+    benchmarks:
+      - wikitext
+      - lambada
+    phi-2:
+      name: MPT-7B
+      type: causal-lm
+      quantization: 4bit
+      output_dir: models/mlx_converted/MPT-7B
 
 text_models:
   - name: Llama-2-7b

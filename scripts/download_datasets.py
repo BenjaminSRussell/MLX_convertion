@@ -10,7 +10,7 @@ import argparse
 import json
 import yaml
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datasets import load_dataset
 from datetime import datetime
 import sys
@@ -22,6 +22,67 @@ def load_datasets_config(config_path: Path) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def load_dataset_from_hf(ds_name: str, subset: Optional[str], cache_dir: Path):
+    """Load dataset from HuggingFace Hub"""
+    try:
+        if subset:
+            return load_dataset(ds_name, subset, cache_dir=str(cache_dir))
+        else:
+            return load_dataset(ds_name, cache_dir=str(cache_dir))
+    except Exception as e:
+        print(f"  ✗ Failed to download: {e}", file=sys.stderr)
+        return None
+
+
+def collect_dataset_metadata(dataset, dataset_name: str, dataset_config: Dict[str, Any]) -> Dict[str, Any]:
+    """Collect metadata about the downloaded dataset"""
+    metadata = {
+        'dataset_name': dataset_name,
+        'hf_name': dataset_config['name'],
+        'subset': dataset_config.get('subset'),
+        'downloaded': datetime.now().isoformat(),
+        'splits': {},
+        'metrics': dataset_config.get('metrics', []),
+        'preprocessing': dataset_config.get('preprocessing', {}),
+        'description': dataset_config.get('description', ''),
+    }
+    
+    for split_name, split_data in dataset.items():
+        metadata['splits'][split_name] = {
+            'num_examples': len(split_data),
+            'features': list(split_data.features.keys()),
+        }
+    
+    return metadata
+
+
+def save_dataset_metadata(metadata: Dict[str, Any], output_dir: Path) -> Path:
+    """Save metadata to JSON file"""
+    metadata_file = output_dir / 'metadata.json'
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    return metadata_file
+
+
+def save_dataset_samples(dataset, output_dir: Path) -> Path:
+    """Save sample data to JSON file"""
+    sample_file = output_dir / 'samples.json'
+    samples = {}
+    
+    for split_name, split_data in dataset.items():
+        num_samples = min(5, len(split_data))
+        if num_samples > 0:
+            samples[split_name] = [
+                {k: str(v) for k, v in example.items()}
+                for example in split_data.select(range(num_samples))
+            ]
+    
+    with open(sample_file, 'w') as f:
+        json.dump(samples, f, indent=2)
+    
+    return sample_file
+
+
 def download_dataset(
     dataset_name: str,
     dataset_config: Dict[str, Any],
@@ -30,7 +91,7 @@ def download_dataset(
 ) -> Dict[str, Any]:
     """
     Download and prepare a single dataset.
-
+    
     Returns metadata about the downloaded dataset.
     """
     print(f"\n{'='*80}")
@@ -39,78 +100,91 @@ def download_dataset(
 
     ds_name = dataset_config['name']
     subset = dataset_config.get('subset')
-
+    
     print(f"  HuggingFace name: {ds_name}")
     if subset:
         print(f"  Subset: {subset}")
-
+    
     # Load dataset
-    try:
-        if subset:
-            dataset = load_dataset(ds_name, subset, cache_dir=str(cache_dir))
-        else:
-            dataset = load_dataset(ds_name, cache_dir=str(cache_dir))
-    except Exception as e:
-        print(f"  ✗ Failed to download: {e}", file=sys.stderr)
+    dataset = load_dataset_from_hf(ds_name, subset, cache_dir)
+    if dataset is None:
         return None
-
+    
     # Collect metadata
-    metadata = {
-        'dataset_name': dataset_name,
-        'hf_name': ds_name,
-        'subset': subset,
-        'downloaded': datetime.now().isoformat(),
-        'splits': {},
-        'metrics': dataset_config.get('metrics', []),
-        'preprocessing': dataset_config.get('preprocessing', {}),
-        'description': dataset_config.get('description', ''),
-    }
-
-    # Get split information
-    for split_name, split_data in dataset.items():
-        metadata['splits'][split_name] = {
-            'num_examples': len(split_data),
-            'features': list(split_data.features.keys()),
-        }
-
+    metadata = collect_dataset_metadata(dataset, dataset_name, dataset_config)
+    
+    # Create output directory
+    dataset_output_dir = output_dir / dataset_name
+    dataset_output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save metadata
+    metadata_file = save_dataset_metadata(metadata, dataset_output_dir)
+    print(f"  Metadata saved: {metadata_file}")
+    
+    # Save sample data
+    sample_file = save_dataset_samples(dataset, dataset_output_dir)
+    print(f"  Samples saved: {sample_file}")
+    
     total_examples = sum(
         split_info['num_examples']
         for split_info in metadata['splits'].values()
     )
-
+    
     print(f"  ✓ Downloaded successfully")
     print(f"  Splits: {list(metadata['splits'].keys())}")
     print(f"  Total examples: {total_examples:,}")
-
-    # Save metadata
-    dataset_output_dir = output_dir / dataset_name
-    dataset_output_dir.mkdir(parents=True, exist_ok=True)
-
-    metadata_file = dataset_output_dir / 'metadata.json'
-    with open(metadata_file, 'w') as f:
-        json.dump(metadata, f, indent=2)
-
-    print(f"  Metadata saved: {metadata_file}")
-
-    # Save sample data
-    sample_file = dataset_output_dir / 'samples.json'
-    samples = {}
-
-    for split_name, split_data in dataset.items():
-        # Get up to 5 samples from each split
-        num_samples = min(5, len(split_data))
-        if num_samples > 0:
-            samples[split_name] = [
-                {k: str(v) for k, v in example.items()}
-                for example in split_data.select(range(num_samples))
-            ]
-
-    with open(sample_file, 'w') as f:
-        json.dump(samples, f, indent=2)
-
-    print(f"  Samples saved: {sample_file}")
-
+    
     return metadata
+
+
+def download_all_datasets(datasets_config: Dict[str, Any], cache_dir: Path, output_dir: Path) -> Dict[str, Any]:
+    """Download all datasets in the configuration"""
+    print(f"\nDownloading {len(datasets_config)} datasets")
+    print(f"Cache directory: {cache_dir}")
+    print(f"Output directory: {output_dir}")
+
+    results = []
+    failed = []
+
+    for i, (dataset_name, dataset_config) in enumerate(datasets_config.items(), 1):
+        print(f"\n[{i}/{len(datasets_config)}] Processing {dataset_name}...")
+
+        result = download_dataset(dataset_name, dataset_config, cache_dir, output_dir)
+
+        if result:
+            results.append(result)
+        else:
+            failed.append(dataset_name)
+
+    # Save summary
+    summary = {
+        'total_datasets': len(datasets_config),
+        'successful': len(results),
+        'failed': len(failed),
+        'failed_datasets': failed,
+        'download_date': datetime.now().isoformat(),
+        'cache_dir': str(cache_dir),
+        'datasets': results
+    }
+
+    summary_file = output_dir / 'download_summary.json'
+    with open(summary_file, 'w') as f:
+        json.dump(summary, f, indent=2)
+
+    print(f"\n{'='*80}")
+    print("DOWNLOAD SUMMARY")
+    print(f"{'='*80}")
+    print(f"Total datasets: {len(datasets_config)}")
+    print(f"Successful: {len(results)}")
+    print(f"Failed: {len(failed)}")
+
+    if failed:
+        print(f"\nFailed datasets:")
+        for name in failed:
+            print(f"  - {name}")
+
+    print(f"\nSummary saved: {summary_file}")
+    return summary
 
 
 def main():
@@ -193,51 +267,7 @@ def main():
 
     else:
         # Download all datasets
-        print(f"\nDownloading {len(datasets_config)} datasets")
-        print(f"Cache directory: {cache_dir}")
-        print(f"Output directory: {output_dir}")
-
-        results = []
-        failed = []
-
-        for i, (dataset_name, dataset_config) in enumerate(datasets_config.items(), 1):
-            print(f"\n[{i}/{len(datasets_config)}] Processing {dataset_name}...")
-
-            result = download_dataset(dataset_name, dataset_config, cache_dir, output_dir)
-
-            if result:
-                results.append(result)
-            else:
-                failed.append(dataset_name)
-
-        # Save summary
-        summary = {
-            'total_datasets': len(datasets_config),
-            'successful': len(results),
-            'failed': len(failed),
-            'failed_datasets': failed,
-            'download_date': datetime.now().isoformat(),
-            'cache_dir': str(cache_dir),
-            'datasets': results
-        }
-
-        summary_file = output_dir / 'download_summary.json'
-        with open(summary_file, 'w') as f:
-            json.dump(summary, f, indent=2)
-
-        print(f"\n{'='*80}")
-        print("DOWNLOAD SUMMARY")
-        print(f"{'='*80}")
-        print(f"Total datasets: {len(datasets_config)}")
-        print(f"Successful: {len(results)}")
-        print(f"Failed: {len(failed)}")
-
-        if failed:
-            print(f"\nFailed datasets:")
-            for name in failed:
-                print(f"  - {name}")
-
-        print(f"\nSummary saved: {summary_file}")
+        download_all_datasets(datasets_config, cache_dir, output_dir)
 
     print("\n✓ Dataset download complete!")
     return 0
