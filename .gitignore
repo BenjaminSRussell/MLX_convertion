@@ -46,3 +46,4 @@ Thumbs.db
 # HuggingFace cache
 .cache/
 datasets/
+.venv/

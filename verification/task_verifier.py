@@ -116,51 +116,51 @@ class TaskVerifier:
         ground_truth_scores: List[float],
         model_name: str,
         dataset_name: str,
-        min_spearman: float = 0.98
+        min_spearman: float = 0.0,
+        max_spearman_drop: float = 0.01,
     ) -> TaskVerificationResult:
         """
-        Verify embedding model quality using correlation metrics.
+        Verify embedding conversion fidelity.
 
-        Args:
-            baseline_scores: PyTorch baseline similarity scores
-            converted_scores: MLX converted similarity scores
-            ground_truth_scores: Ground truth similarity scores
-            model_name: Model name
-            dataset_name: Dataset name
-            min_spearman: Minimum Spearman correlation
-
-        Returns:
-            TaskVerificationResult
+        Pass criterion is conversion drop vs the PyTorch baseline (spearman_drop /
+        score_correlation), not absolute STS correlation against human labels —
+        strong embedders typically score ~0.82–0.88 on STS-B, so a 0.98 absolute
+        floor would reject lossless conversions.
         """
-        # Calculate baseline correlations
+        if not (len(baseline_scores) == len(converted_scores) == len(ground_truth_scores)):
+            raise ValueError(
+                "baseline_scores, converted_scores, and ground_truth_scores must have equal length"
+            )
+
         baseline_spearman, _ = spearmanr(baseline_scores, ground_truth_scores)
         baseline_pearson, _ = pearsonr(baseline_scores, ground_truth_scores)
-
-        # Calculate converted correlations
         converted_spearman, _ = spearmanr(converted_scores, ground_truth_scores)
         converted_pearson, _ = pearsonr(converted_scores, ground_truth_scores)
 
-        # Calculate cosine similarity preservation
         baseline_arr = np.array(baseline_scores)
         converted_arr = np.array(converted_scores)
         score_correlation, _ = pearsonr(baseline_arr, converted_arr)
 
-        # Check if passed
-        passed = converted_spearman >= min_spearman
+        spearman_drop = float(baseline_spearman - converted_spearman)
+        passed = spearman_drop <= max_spearman_drop
+        if min_spearman > 0:
+            # Optional absolute floor (off by default).
+            passed = passed and (converted_spearman >= min_spearman)
 
         metrics = {
-            'baseline_spearman': baseline_spearman,
-            'converted_spearman': converted_spearman,
-            'spearman_drop': baseline_spearman - converted_spearman,
-            'baseline_pearson': baseline_pearson,
-            'converted_pearson': converted_pearson,
-            'score_correlation': score_correlation,
+            'baseline_spearman': float(baseline_spearman),
+            'converted_spearman': float(converted_spearman),
+            'spearman_drop': spearman_drop,
+            'baseline_pearson': float(baseline_pearson),
+            'converted_pearson': float(converted_pearson),
+            'score_correlation': float(score_correlation),
         }
 
         logger.info(f"Embedding Verification - {model_name} on {dataset_name}")
         logger.info(f"  Baseline Spearman: {baseline_spearman:.4f}")
         logger.info(f"  Converted Spearman: {converted_spearman:.4f}")
-        logger.info(f"  Threshold: {min_spearman:.4f}")
+        logger.info(f"  Spearman drop: {spearman_drop:.4f} (max {max_spearman_drop:.4f})")
+        logger.info(f"  Score correlation (baseline vs converted): {score_correlation:.4f}")
         logger.info(f"  Status: {'✓ PASSED' if passed else '✗ FAILED'}")
 
         return TaskVerificationResult(
@@ -168,10 +168,10 @@ class TaskVerifier:
             model_name=model_name,
             dataset_name=dataset_name,
             passed=passed,
-            primary_metric='spearman_correlation',
-            primary_metric_value=converted_spearman,
-            baseline_value=baseline_spearman,
-            threshold=min_spearman,
+            primary_metric='spearman_drop',
+            primary_metric_value=spearman_drop,
+            baseline_value=float(baseline_spearman),
+            threshold=max_spearman_drop,
             metrics=metrics
         )
 
