@@ -13,11 +13,11 @@ Unlike compare_encoder_models.py, this compares the RIGHT things:
 
 import argparse
 import json
-import numpy as np
-from pathlib import Path
-from typing import Dict, Any, List, Tuple
 import sys
+from pathlib import Path
+from typing import Any, Dict
 
+import numpy as np
 from transformers import AutoModel
 
 
@@ -183,19 +183,19 @@ def print_comparison_report(results: Dict[str, Any], metadata: Dict[str, Any]):
     print(f"Quantized layers: {overall['num_quantized_layers']}")
     print(f"Unquantized layers: {overall['num_unquantized_layers']}")
     print()
-    print(f"Mean Squared Error (MSE):")
+    print("Mean Squared Error (MSE):")
     print(f"  Mean: {overall['mse_mean']:.2e}")
     print(f"  Max:  {overall['mse_max']:.2e}")
     print()
-    print(f"Mean Absolute Error (MAE):")
+    print("Mean Absolute Error (MAE):")
     print(f"  Mean: {overall['mae_mean']:.2e}")
     print(f"  Max:  {overall['mae_max']:.2e}")
     print()
-    print(f"Max Absolute Error:")
+    print("Max Absolute Error:")
     print(f"  Mean: {overall['max_error_mean']:.4f}")
     print(f"  Max:  {overall['max_error_max']:.4f}")
     print()
-    print(f"Relative Error:")
+    print("Relative Error:")
     print(f"  Mean: {overall['relative_error_mean']:.4f} ({overall['relative_error_mean']*100:.2f}%)")
     print(f"  Max:  {overall['relative_error_max']:.4f} ({overall['relative_error_max']*100:.2f}%)")
     print()
@@ -303,7 +303,7 @@ def main():
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
 
-        print(f"Loading models...")
+        print("Loading models...")
         print(f"  MLX: {args.mlx_model_path}")
         print(f"  HF:  {metadata['hf_name']}")
 

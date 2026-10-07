@@ -1,14 +1,15 @@
-import mlx.core as mx
-from mlx.utils import tree_unflatten
-from transformers import AutoTokenizer
-import numpy as np
 import json
-import yaml
 import os
 from datetime import datetime
 
+import mlx.core as mx
+import yaml
+from mlx.utils import tree_unflatten
+
 # Import model classes
 from phi2_model import Phi2Model
+from transformers import AutoTokenizer
+
 
 # Define test functions
 def test_forward_pass(model, tokenizer, config):
@@ -122,7 +123,7 @@ if __name__ == "__main__":
     os.makedirs(results_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_file = os.path.join(results_dir, f"test_results_{timestamp}.json")
-    
+
     all_results = []
 
     # Test each model in the 'models' list
@@ -130,7 +131,7 @@ if __name__ == "__main__":
         model_name = model_info["name"]
         task = model_info["task"]
         model_path = f"models/mlx_converted/{model_name}"
-        
+
         if not os.path.exists(model_path):
             print(f"[test] Model directory {model_path} does not exist. Skipping {model_name}")
             continue

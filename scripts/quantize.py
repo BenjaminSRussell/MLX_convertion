@@ -1,4 +1,3 @@
-import mlx.core as mx
 
 def quantize_model(model, bits):
     """

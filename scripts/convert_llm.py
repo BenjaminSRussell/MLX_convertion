@@ -13,10 +13,9 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict
 
 import mlx.core as mx
-import numpy as np
 import yaml
 from mlx_lm import convert as mlx_convert
 

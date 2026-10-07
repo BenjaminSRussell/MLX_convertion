@@ -13,12 +13,12 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 import mlx.core as mx
 import numpy as np
 import yaml
-from transformers import AutoModel, AutoTokenizer, AutoConfig
+from transformers import AutoConfig, AutoModel, AutoTokenizer
 
 
 def setup_logging(model_name=None):
@@ -43,10 +43,10 @@ def should_quantize_weight(name: str, weight_np: np.ndarray) -> bool:
     """checks if we should quantize this weight or skip it"""
     if any(skip in name.lower() for skip in ['layernorm', 'bias', 'norm', 'ln']):
         return False
-        
+
     if len(weight_np.shape) != 2:
         return False
-        
+
     return True
 
 
@@ -54,10 +54,10 @@ def quantize_8bit(weight_np: np.ndarray) -> tuple:
     """quantizes weights to 8-bit with scale factor"""
     w_max = np.abs(weight_np).max()
     scale = w_max / 127.0 if w_max > 0 else 1.0
-    
+
     w_quant = np.round(weight_np / scale)
     w_quant = np.clip(w_quant, -127, 127).astype(np.int8)
-    
+
     return w_quant, scale
 
 
@@ -65,10 +65,10 @@ def quantize_4bit(weight_np: np.ndarray) -> tuple:
     """quantizes weights to 4-bit with scale factor"""
     w_max = np.abs(weight_np).max()
     scale = w_max / 7.0 if w_max > 0 else 1.0
-    
+
     w_quant = np.round(weight_np / scale)
     w_quant = np.clip(w_quant, -7, 7).astype(np.int8)
-    
+
     return w_quant, scale
 
 
@@ -81,7 +81,7 @@ def quantize_weights_int8(
 
     for name, weight in weights.items():
         weight_np = np.array(weight)
-        
+
         if not should_quantize_weight(name, weight_np):
             quantized_data[name] = weight_np.astype(np.float32)
             continue
@@ -90,12 +90,12 @@ def quantize_weights_int8(
             w_quant, scale = quantize_8bit(weight_np)
             quantized_data[name] = w_quant
             quantized_data[f"{name}.__scale__"] = np.array(scale, dtype=np.float32)
-            
+
         elif bits == 4:
             w_quant, scale = quantize_4bit(weight_np)
             quantized_data[name] = w_quant
             quantized_data[f"{name}.__scale__"] = np.array(scale, dtype=np.float32)
-            
+
         else:
             quantized_data[name] = weight_np.astype(np.float32)
 

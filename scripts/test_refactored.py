@@ -4,30 +4,23 @@ This replaces the god functions in test.py with modular, maintainable code.
 """
 
 import argparse
-import yaml
-import json
-import os
-import tempfile
-import numpy as np
-from pathlib import Path
-from datasets import load_dataset
-import logging
 import glob
+import json
+import logging
+import os
 import sys
+import tempfile
+from pathlib import Path
+
+import numpy as np
+import yaml
+from datasets import load_dataset
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from mlx_conversion.handlers import (
-    NLIHandler,
-    TextClassificationHandler,
-    SemanticSimilarityHandler
-)
-from mlx_conversion.utils import (
-    MetricsCalculator,
-    MemoryTracker,
-    ModelComparator
-)
+from mlx_conversion.handlers import NLIHandler, SemanticSimilarityHandler, TextClassificationHandler
+from mlx_conversion.utils import MemoryTracker, MetricsCalculator, ModelComparator
 
 
 def setup_logging():
