@@ -71,106 +71,127 @@ class QualityGateEnforcer:
             required_gates = ['layer', 'task', 'parity', 'performance']
 
         gates_passed = {}
+        gate_status = {}  # passed|failed|missing|skipped
         layer_results = None
         task_results = None
         parity_results = None
         performance_results = None
 
+        def _mark(gate: str, passed: bool, status: str):
+            gates_passed[gate] = passed
+            gate_status[gate] = status
+            label = {'passed': '✓ PASSED', 'failed': '✗ FAILED', 'missing': '✗ MISSING', 'skipped': '○ SKIPPED'}.get(status, status)
+            logger.info(f"{gate.capitalize()} gate: {label}")
+
         # Layer verification
-        if 'layer' in required_gates and layer_data:
-            layer_results = self.layer_verifier.verify_model(
-                original_weights=layer_data['original_weights'],
-                quantized_weights=layer_data['quantized_weights'],
-                scales=layer_data['scales'],
-                zero_points=layer_data.get('zero_points')
-            )
-            gates_passed['layer'] = all(r.passed for r in layer_results)
-            logger.info(f"Layer gate: {'✓ PASSED' if gates_passed['layer'] else '✗ FAILED'}")
+        if 'layer' in required_gates:
+            if not layer_data:
+                _mark('layer', False, 'missing')
+            else:
+                layer_results = self.layer_verifier.verify_model(
+                    original_weights=layer_data['original_weights'],
+                    quantized_weights=layer_data['quantized_weights'],
+                    scales=layer_data['scales'],
+                    zero_points=layer_data.get('zero_points')
+                )
+                ok = all(r.passed for r in layer_results)
+                _mark('layer', ok, 'passed' if ok else 'failed')
 
         # Task verification
-        if 'task' in required_gates and task_data:
-            task_type = task_data['task_type']
-
-            if task_type == 'nli':
-                task_result = self.task_verifier.verify_nli(
-                    baseline_predictions=task_data['baseline_predictions'],
-                    converted_predictions=task_data['converted_predictions'],
-                    ground_truth=task_data['ground_truth'],
-                    model_name=model_name,
-                    dataset_name=task_data.get('dataset_name', 'unknown'),
-                    max_accuracy_drop=task_data.get('max_accuracy_drop', 0.01)
-                )
-            elif task_type == 'embedding':
-                task_result = self.task_verifier.verify_embeddings(
-                    baseline_scores=task_data['baseline_scores'],
-                    converted_scores=task_data['converted_scores'],
-                    ground_truth_scores=task_data['ground_truth_scores'],
-                    model_name=model_name,
-                    dataset_name=task_data.get('dataset_name', 'unknown'),
-                    min_spearman=task_data.get('min_spearman', 0.98)
-                )
-            elif task_type == 'text_classification':
-                task_result = self.task_verifier.verify_text_classification(
-                    baseline_predictions=task_data['baseline_predictions'],
-                    converted_predictions=task_data['converted_predictions'],
-                    ground_truth=task_data['ground_truth'],
-                    model_name=model_name,
-                    dataset_name=task_data.get('dataset_name', 'unknown'),
-                    max_accuracy_drop=task_data.get('max_accuracy_drop', 0.015)
-                )
-            elif task_type == 'ner':
-                task_result = self.task_verifier.verify_ner(
-                    baseline_predictions=task_data['baseline_predictions'],
-                    converted_predictions=task_data['converted_predictions'],
-                    ground_truth=task_data['ground_truth'],
-                    model_name=model_name,
-                    dataset_name=task_data.get('dataset_name', 'unknown'),
-                    max_f1_drop=task_data.get('max_f1_drop', 0.02)
-                )
+        if 'task' in required_gates:
+            if not task_data:
+                _mark('task', False, 'missing')
             else:
-                logger.warning(f"Unknown task type: {task_type}")
+                task_type = task_data['task_type']
                 task_result = None
 
-            if task_result:
-                task_results = [task_result]
-                gates_passed['task'] = task_result.passed
-                logger.info(f"Task gate: {'✓ PASSED' if gates_passed['task'] else '✗ FAILED'}")
+                if task_type == 'nli':
+                    task_result = self.task_verifier.verify_nli(
+                        baseline_predictions=task_data['baseline_predictions'],
+                        converted_predictions=task_data['converted_predictions'],
+                        ground_truth=task_data['ground_truth'],
+                        model_name=model_name,
+                        dataset_name=task_data.get('dataset_name', 'unknown'),
+                        max_accuracy_drop=task_data.get('max_accuracy_drop', 0.01)
+                    )
+                elif task_type == 'embedding':
+                    task_result = self.task_verifier.verify_embeddings(
+                        baseline_scores=task_data['baseline_scores'],
+                        converted_scores=task_data['converted_scores'],
+                        ground_truth_scores=task_data['ground_truth_scores'],
+                        model_name=model_name,
+                        dataset_name=task_data.get('dataset_name', 'unknown'),
+                        max_spearman_drop=task_data.get('max_spearman_drop', task_data.get('max_accuracy_drop', 0.01)),
+                    )
+                elif task_type == 'text_classification':
+                    task_result = self.task_verifier.verify_text_classification(
+                        baseline_predictions=task_data['baseline_predictions'],
+                        converted_predictions=task_data['converted_predictions'],
+                        ground_truth=task_data['ground_truth'],
+                        model_name=model_name,
+                        dataset_name=task_data.get('dataset_name', 'unknown'),
+                        max_accuracy_drop=task_data.get('max_accuracy_drop', 0.015)
+                    )
+                elif task_type == 'ner':
+                    task_result = self.task_verifier.verify_ner(
+                        baseline_predictions=task_data['baseline_predictions'],
+                        converted_predictions=task_data['converted_predictions'],
+                        ground_truth=task_data['ground_truth'],
+                        model_name=model_name,
+                        dataset_name=task_data.get('dataset_name', 'unknown'),
+                        max_f1_drop=task_data.get('max_f1_drop', 0.02)
+                    )
+                else:
+                    logger.warning(f"Unknown task type: {task_type}")
+                    _mark('task', False, 'failed')
+
+                if task_result:
+                    task_results = [task_result]
+                    _mark('task', task_result.passed, 'passed' if task_result.passed else 'failed')
 
         # Parity verification
-        if 'parity' in required_gates and parity_data:
-            parity_results = []
-
-            # Output parity
-            if 'pytorch_outputs' in parity_data and 'mlx_outputs' in parity_data:
-                parity_result = self.parity_verifier.verify_output_parity(
-                    pytorch_outputs=parity_data['pytorch_outputs'],
-                    mlx_outputs=parity_data['mlx_outputs'],
-                    test_name='output_parity'
-                )
-                parity_results.append(parity_result)
-
-            gates_passed['parity'] = all(r.passed for r in parity_results) if parity_results else True
-            logger.info(f"Parity gate: {'✓ PASSED' if gates_passed['parity'] else '✗ FAILED'}")
+        if 'parity' in required_gates:
+            if not parity_data:
+                _mark('parity', False, 'missing')
+            else:
+                parity_results = []
+                if 'pytorch_outputs' in parity_data and 'mlx_outputs' in parity_data:
+                    parity_result = self.parity_verifier.verify_output_parity(
+                        pytorch_outputs=parity_data['pytorch_outputs'],
+                        mlx_outputs=parity_data['mlx_outputs'],
+                        test_name='output_parity'
+                    )
+                    parity_results.append(parity_result)
+                if not parity_results:
+                    _mark('parity', False, 'missing')
+                else:
+                    ok = all(r.passed for r in parity_results)
+                    _mark('parity', ok, 'passed' if ok else 'failed')
 
         # Performance verification
-        if 'performance' in required_gates and performance_data:
-            performance_results = self.performance_verifier.verify_all_metrics(
-                model_name=model_name,
-                current_metrics=performance_data
-            )
-            gates_passed['performance'] = all(r.passed for r in performance_results)
-            logger.info(f"Performance gate: {'✓ PASSED' if gates_passed['performance'] else '✗ FAILED'}")
+        if 'performance' in required_gates:
+            if not performance_data:
+                _mark('performance', False, 'missing')
+            else:
+                performance_results = self.performance_verifier.verify_all_metrics(
+                    model_name=model_name,
+                    current_metrics=performance_data
+                )
+                ok = all(r.passed for r in performance_results)
+                _mark('performance', ok, 'passed' if ok else 'failed')
 
-        # Overall result
-        all_passed = all(gates_passed.get(gate, True) for gate in required_gates)
+        # Overall: missing required gates fail (no vacuous True default)
+        all_passed = all(gates_passed.get(gate, False) for gate in required_gates)
+        passed_count = sum(1 for g in required_gates if gates_passed.get(g) is True)
+        failed_count = len(required_gates) - passed_count
 
-        # Create summary
         summary = {
             'total_gates': len(required_gates),
-            'gates_passed': sum(gates_passed.values()),
-            'gates_failed': len(required_gates) - sum(gates_passed.values()),
+            'gates_passed': passed_count,
+            'gates_failed': failed_count,
             'required_gates': required_gates,
-            'gate_status': gates_passed
+            'gate_status': gates_passed,
+            'gate_status_detail': gate_status,
         }
 
         result = QualityGateResult(
