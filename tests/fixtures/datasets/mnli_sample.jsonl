@@ -1,0 +1,8 @@
+{"premise": "A man inspects a uniform.", "hypothesis": "The man is sleeping.", "label": 2}
+{"premise": "Two kids play in a park.", "hypothesis": "Children are outside.", "label": 0}
+{"premise": "A woman reads a book.", "hypothesis": "Someone is reading.", "label": 0}
+{"premise": "A dog runs on the beach.", "hypothesis": "A cat sits indoors.", "label": 2}
+{"premise": "People wait at a bus stop.", "hypothesis": "They may be commuting.", "label": 1}
+{"premise": "A chef slices onions.", "hypothesis": "Food is being prepared.", "label": 0}
+{"premise": "A cyclist climbs a hill.", "hypothesis": "The cyclist is tired.", "label": 1}
+{"premise": "Snow covers the street.", "hypothesis": "It is summer and hot.", "label": 2}

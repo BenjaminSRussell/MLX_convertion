@@ -186,7 +186,7 @@ class ModelComparator:
         logger.info(f"Compression ratio: {metrics['compression_ratio']:.1f}x")
 
         # Quality gates
-        logger.info(f"\nQuality Gates:")
+        logger.info("\nQuality Gates:")
         for gate_name, gate_info in gates.items():
             if gate_name == 'all_passed':
                 continue
@@ -197,9 +197,9 @@ class ModelComparator:
 
         # Overall result
         if gates['all_passed']:
-            logger.info(f"\n✓ ALL QUALITY GATES PASSED")
+            logger.info("\n✓ ALL QUALITY GATES PASSED")
         else:
-            logger.warning(f"\n✗ SOME QUALITY GATES FAILED")
+            logger.warning("\n✗ SOME QUALITY GATES FAILED")
 
         logger.info(f"{'='*60}\n")
 

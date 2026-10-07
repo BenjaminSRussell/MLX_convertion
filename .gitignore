@@ -47,3 +47,12 @@ Thumbs.db
 .cache/
 datasets/
 .venv/
+
+# Conversion registry + artifacts (#6, #11) and dataset cache (#9)
+mlx_convertion.db
+artifacts/
+data/
+
+# Committed CI eval fixtures (#9)
+!tests/fixtures/datasets/
+!tests/fixtures/datasets/*.jsonl

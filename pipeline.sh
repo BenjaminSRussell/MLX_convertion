@@ -74,6 +74,43 @@ run_convert() {
   PYTHONPATH="$ROOT_DIR" python "$SCRIPTS_DIR/convert.py" "${convert_args[@]}"
 }
 
+# Post-convert stages (#5). Operate on an exported weights archive:
+#   WEIGHTS_NPZ=output/<model>/weights.npz BITS=8 MODEL_ID=org/name ./pipeline.sh
+# optimize: drop training-only tensors, tie duplicates (lossless)
+# quantize: group-wise affine int8/int4; fails if worst-tensor cosine < MIN_COSINE
+# metadata: write artifacts/{model}/{bits}bit/metadata.json for upload/publish (#11)
+run_optimize_quantize() {
+  if [[ -z "${WEIGHTS_NPZ:-}" ]]; then
+    echo "[pipeline] WEIGHTS_NPZ not set; skipping optimize/quantize stages"
+    return
+  fi
+  local bits="${BITS:-8}"
+  local model_id="${MODEL_ID:-$(basename "$(dirname "$WEIGHTS_NPZ")")}"
+  local slug="${model_id//\//__}"
+  local art_dir="$ROOT_DIR/artifacts/$slug/${bits}bit"
+  mkdir -p "$art_dir"
+  if [[ -n "$DRY_RUN" ]]; then
+    echo "[pipeline] (dry-run) optimize $WEIGHTS_NPZ -> quantize ${bits}-bit -> $art_dir"
+    return
+  fi
+  echo "[pipeline] Optimizing $WEIGHTS_NPZ"
+  PYTHONPATH="$ROOT_DIR" python "$SCRIPTS_DIR/optimize.py" "$WEIGHTS_NPZ" "$art_dir/optimized.npz" \
+    --report "$art_dir/optimize_report.json"
+  echo "[pipeline] Quantizing to ${bits}-bit"
+  PYTHONPATH="$ROOT_DIR" python "$SCRIPTS_DIR/quantize.py" "$art_dir/optimized.npz" "$art_dir/weights.npz" \
+    --bits "$bits" --min-cosine "${MIN_COSINE:-0.99}"
+  rm -f "$art_dir/optimized.npz"
+  PYTHONPATH="$ROOT_DIR" python - "$model_id" "$bits" "$art_dir" <<'PYEOF'
+import sys
+from pathlib import Path
+from utils.artifacts import build_metadata, write_metadata
+from utils.run_registry import current_git_sha
+model_id, bits, d = sys.argv[1], int(sys.argv[2]), Path(sys.argv[3])
+write_metadata(d, build_metadata(model_id, bits, d, strategy="npz-affine", git_sha=current_git_sha()))
+print(f"[pipeline] wrote {d / 'metadata.json'}")
+PYEOF
+}
+
 run_tests() {
   echo "[pipeline] Running evaluations"
   ARGS=()
@@ -101,5 +138,6 @@ run_upload() {
 
 clear_cache
 run_convert
+run_optimize_quantize
 run_tests
 run_upload

@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-linux-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-security:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -16,23 +21,19 @@ jobs:
           python-version: "3.12"
       - name: Install ruff + bandit
         run: pip install ruff bandit
-      - name: Ruff (scripts + verification)
-        run: ruff check scripts
+      - name: Ruff (scripts + utils + verification)
+        run: ruff check scripts utils verification tests
       - name: Bandit high-severity gate
-        run: bandit -r scripts -lll -c .bandit
+        run: bandit -r scripts utils -lll -c .bandit
   unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install test deps
-        run: pip install pytest numpy scipy scikit-learn
+      - name: Install test deps (no MLX / torch)
+        run: pip install pytest numpy scipy scikit-learn pyyaml
       - name: Pytest (non-MLX units)
-        run: |
-          if [ -d tests ]; then
-            PYTHONPATH=. pytest tests -q --ignore=tests/test_mlx 2>/dev/null || PYTHONPATH=. pytest tests -q
-          else
-            echo "No tests/ yet"
-          fi
+        run: PYTHONPATH=. pytest tests -q

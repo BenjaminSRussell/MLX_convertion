@@ -1,0 +1,6 @@
+# Small, committed eval fixtures used by Linux CI (#9).
+# sha256 = utils.dataset_lock.fingerprint_jsonl(path); CI fails if a fixture drifts.
+fixtures:
+  mnli_sample:
+    path: tests/fixtures/datasets/mnli_sample.jsonl
+    sha256: 1a263911fb3374fda2487447fd665128ebcb00e4821b1ec2a72fad0ebbeaf11f

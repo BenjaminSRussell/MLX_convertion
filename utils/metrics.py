@@ -34,7 +34,8 @@ class MetricsCalculator:
         references: List[Any],
         average: str = 'macro'
     ) -> float:
-        """calculates precision"""
+        """
+        Calculate precision score.
 
         Args:
             predictions: List of predicted labels

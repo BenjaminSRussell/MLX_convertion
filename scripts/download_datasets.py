@@ -14,7 +14,15 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
-from datasets import load_dataset
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from utils.dataset_lock import DatasetChecksumError, fingerprint_split, verify  # noqa: E402
+
+try:
+    from datasets import load_dataset
+except ImportError:  # pragma: no cover - only needed for real downloads
+    load_dataset = None
 
 
 def load_datasets_config(config_path: Path) -> Dict[str, Any]:
@@ -23,13 +31,19 @@ def load_datasets_config(config_path: Path) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def load_dataset_from_hf(ds_name: str, subset: Optional[str], cache_dir: Path):
-    """Load dataset from HuggingFace Hub"""
+def load_dataset_from_hf(ds_name: str, subset: Optional[str], cache_dir: Path, revision: Optional[str] = None):
+    """Load dataset from HuggingFace Hub, pinned to ``revision`` when given (#9)."""
+    if load_dataset is None:
+        print("  ✗ `datasets` is not installed (pip install datasets)", file=sys.stderr)
+        return None
     try:
+        kwargs = {"cache_dir": str(cache_dir)}
+        if revision:
+            kwargs["revision"] = revision
         if subset:
-            return load_dataset(ds_name, subset, cache_dir=str(cache_dir))
+            return load_dataset(ds_name, subset, **kwargs)
         else:
-            return load_dataset(ds_name, cache_dir=str(cache_dir))
+            return load_dataset(ds_name, **kwargs)
     except Exception as e:
         print(f"  ✗ Failed to download: {e}", file=sys.stderr)
         return None
@@ -106,10 +120,25 @@ def download_dataset(
     if subset:
         print(f"  Subset: {subset}")
 
-    # Load dataset
-    dataset = load_dataset_from_hf(ds_name, subset, cache_dir)
+    # Load dataset (pinned revision when configured)
+    revision = dataset_config.get('revision')
+    if revision:
+        print(f"  Revision: {revision}")
+    dataset = load_dataset_from_hf(ds_name, subset, cache_dir, revision=revision)
     if dataset is None:
         return None
+
+    # Verify eval-split fingerprint against the pinned sha256 (#9)
+    eval_split = dataset_config.get('splits', {}).get('validation', 'validation')
+    if eval_split in dataset:
+        actual = fingerprint_split(dataset[eval_split])
+        try:
+            verify(actual, dataset_config.get('sha256'), dataset_name)
+        except DatasetChecksumError as exc:
+            print(f"  ✗ {exc}", file=sys.stderr)
+            return None
+        if not dataset_config.get('sha256'):
+            print(f"  ! unpinned: add `sha256: {actual}` to datasets.yaml to lock this split")
 
     # Collect metadata
     metadata = collect_dataset_metadata(dataset, dataset_name, dataset_config)

@@ -5,7 +5,7 @@ Ensures PyTorch and MLX models produce consistent outputs.
 """
 
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import numpy as np
 from scipy.stats import ks_2samp
 import logging
@@ -166,7 +166,7 @@ class ParityVerifier:
             'max_diff_across_runs': float(max_diff)
         }
 
-        logger.info(f"Deterministic Inference Check:")
+        logger.info("Deterministic Inference Check:")
         logger.info(f"  Runs: {num_runs}")
         logger.info(f"  All identical: {all_identical}")
         logger.info(f"  Status: {'✓ PASSED' if passed else '✗ FAILED'}")
@@ -227,7 +227,7 @@ class ParityVerifier:
             'std_difference': float(np.std(differences)) if differences else 0.0
         }
 
-        logger.info(f"Batch Consistency Check:")
+        logger.info("Batch Consistency Check:")
         logger.info(f"  Samples: {len(inputs)}, Batch size: {batch_size}")
         logger.info(f"  Max difference: {max_diff:.6f}")
         logger.info(f"  Status: {'✓ PASSED' if passed else '✗ FAILED'}")
