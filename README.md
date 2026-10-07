@@ -70,3 +70,63 @@ MLX kernels require Apple Silicon. On Linux, install non-MLX deps and run unit t
 - `scripts/` — convert / quantize / verify / upload
 - `config/` — models + datasets YAML
 - `output/` — artifacts (local; not required in git)
+
+## Post-convert stages: optimize → quantize → metadata
+
+| stage | script | what it does |
+|-------|--------|--------------|
+| optimize | `scripts/optimize.py IN.npz OUT.npz [--fp16]` | drops training-only tensors (optimizer/EMA), stores duplicate tensors once (`__tied__` alias map), optional fp16 cast |
+| quantize | `scripts/quantize.py IN.npz OUT.npz --bits 8\|4 [--min-cosine 0.99]` | group-wise affine quantization (same scheme as `mlx.core.quantize`), 4-bit packed two per byte; norms/biases stay float; exits 1 if the worst tensor's cosine is under the gate |
+| metadata | `utils/artifacts.py` | writes `artifacts/{model}/{bits}bit/metadata.json` |
+
+`pipeline.sh` runs these when `WEIGHTS_NPZ` is set:
+
+```bash
+WEIGHTS_NPZ=output/minilm/weights.npz MODEL_ID=sentence-transformers/all-MiniLM-L6-v2 BITS=8 ./pipeline.sh
+```
+
+With MLX installed, `quantize_model()` delegates to `mlx.nn.quantize` for in-memory MLX modules.
+
+## Artifact layout (`metadata.json`)
+
+```
+artifacts/{org}__{name}/{bits}bit/
+  metadata.json   # schema_version, model_id, bits, strategy, metrics, git_sha, run_id, files[{path,bytes,sha256}]
+  weights.npz
+  ...
+```
+
+Upload consumers should read `metadata.json` and check `files[].sha256`.
+`python scripts/upload.py --artifact-dir artifacts/<model>/8bit --dry-run` lists what would be shipped.
+
+## Publishing to Hugging Face
+
+```bash
+python scripts/publish_hf.py artifacts/<model>/8bit            # dry-run: repo id, file list, rendered model card
+HF_TOKEN=... python scripts/publish_hf.py artifacts/<model>/8bit --execute
+```
+
+- The token is read **only** from the `HF_TOKEN` environment variable. Never pass it as an argument or commit it.
+- The model card is rendered from `templates/model_card.md` using `metadata.json`.
+- The default repo is `{HF_NAMESPACE or BenjaminSRussell}/{name}-mlx-{bits}bit`. Override with `--repo-id`.
+
+## Run registry (SQLite)
+
+Conversion runs are stored in `./mlx_convertion.db`. Override the location with `MLX_CONVERTION_DB`.
+
+- `QualityGateEnforcer.record_to_registry(result)` records every gate result, passed **or** failed.
+- `python scripts/list_runs.py [-n 20] [--model M] [--status failed] [--json]`
+- `python scripts/report_gates.py [-n 20] [--model M]` prints a per-gate PASS/FAIL table. It exits **1** if any listed run failed.
+- Resume: `RunRegistry.run_stages(run_id, [("convert", fn), ("quantize", fn), ...])` skips stages already marked `done` and retries `failed` ones. Attempts are counted per stage.
+
+## Reproducible eval datasets
+
+- `config/datasets.yaml` entries may pin `revision:` (passed to `load_dataset`) and `sha256:` (an eval-split fingerprint).
+- A mismatch fails the download. Unpinned datasets print their fingerprint so you can lock them.
+- CI uses committed fixtures (`config/dataset_fixtures.yaml` → `tests/fixtures/datasets/`) instead of downloading.
+
+## Tests / CI
+
+- `PYTHONPATH=. pytest tests -q` runs on Linux without MLX or torch. `utils/__init__` imports heavy modules lazily.
+- `.github/workflows/ci-linux.yml` runs ruff, bandit and pytest on every PR.
+- `.github/workflows/ci-macos-mlx.yml` is an optional `workflow_dispatch` job on `macos-14` that installs `mlx` and runs the suite plus an `mlx.nn.quantize` smoke test. Trigger it from Actions → "CI macOS (MLX, optional)" → Run workflow.

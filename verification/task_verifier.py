@@ -6,7 +6,6 @@ Verifies that converted models maintain task-specific quality metrics.
 
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
-from pathlib import Path
 import numpy as np
 from scipy.stats import spearmanr, pearsonr
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score

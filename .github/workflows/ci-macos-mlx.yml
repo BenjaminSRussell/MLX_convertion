@@ -1,0 +1,35 @@
+name: CI macOS (MLX, optional)
+
+# Manual only: Apple-silicon runners are slow/expensive. Runs the same unit suite
+# plus an MLX smoke test with the real mlx package installed.
+on:
+  workflow_dispatch:
+    inputs:
+      run_quant_smoke:
+        description: "Also run mlx.nn.quantize smoke"
+        type: boolean
+        default: true
+
+jobs:
+  mlx:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install pytest numpy scipy scikit-learn pyyaml mlx
+      - name: Pytest
+        run: PYTHONPATH=. pytest tests -q
+      - name: MLX quantize smoke
+        if: ${{ inputs.run_quant_smoke }}
+        run: |
+          PYTHONPATH=. python - <<'PY'
+          import mlx.nn as nn
+          from scripts.quantize import quantize_model
+          m = nn.Linear(256, 256)
+          quantize_model(m, {"bits": 8})
+          print("quantized:", type(m).__name__)
+          PY

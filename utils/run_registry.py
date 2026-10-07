@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-import subprocess  # nosec B404 - fixed argv, no shell
+import subprocess  # nosec B404
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -65,7 +65,7 @@ def _now() -> str:
 
 def current_git_sha(cwd: Optional[Path] = None) -> Optional[str]:
     try:
-        out = subprocess.run(  # nosec B603 B607 - fixed argv
+        out = subprocess.run(  # nosec B603 B607
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=cwd, capture_output=True, text=True, timeout=5, check=False,
         )

@@ -1,4 +1,11 @@
 # Benchmark datasets configuration
+#
+# Reproducibility (#9): each dataset may pin
+#   revision: <HF dataset commit sha>   -> passed to load_dataset(revision=...)
+#   sha256:   <eval-split fingerprint>  -> verified after download; mismatch = failed download
+# `scripts/download_datasets.py` prints the fingerprint for unpinned datasets so it can be
+# copied here after a trusted first download. CI uses committed fixtures instead
+# (config/dataset_fixtures.yaml).
 version: 1
 huggingface_cache: ../datasets
 cache_dir: /tmp/hf_datasets

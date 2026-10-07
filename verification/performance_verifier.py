@@ -7,9 +7,7 @@ Ensures converted models meet performance targets and don't regress.
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
 from pathlib import Path
-import time
 import json
-import numpy as np
 import logging
 
 logger = logging.getLogger('MLXVerifier.PerformanceVerifier')
@@ -336,7 +334,7 @@ class PerformanceVerifier:
                     report.append(f"      Change: {direction} {abs(r.improvement_pct):.1f}%")
 
                 if r.regression:
-                    report.append(f"      ⚠ REGRESSION DETECTED")
+                    report.append("      ⚠ REGRESSION DETECTED")
             report.append("")
 
         report.append("=" * 60)

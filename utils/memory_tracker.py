@@ -93,7 +93,7 @@ class MemoryTracker:
         Log memory usage summary.
         """
         if self.samples:
-            logger.info(f"Memory Usage Summary:")
+            logger.info("Memory Usage Summary:")
             logger.info(f"  Baseline: {self.baseline_mb:.1f}MB")
             logger.info(f"  Peak: {self.get_peak_memory_mb():.1f}MB")
             logger.info(f"  Average: {self.get_average_memory_mb():.1f}MB")

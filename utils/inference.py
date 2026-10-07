@@ -3,7 +3,7 @@ Inference engine utilities for running model predictions.
 """
 
 import time
-from typing import List, Tuple, Any, Dict
+from typing import List, Tuple, Any
 import torch
 import mlx.core as mx
 import numpy as np
