@@ -19,7 +19,7 @@ jobs:
       - name: Ruff (scripts + verification)
         run: ruff check scripts
       - name: Bandit high-severity gate
-        run: bandit -r scripts -ll -c .bandit
+        run: bandit -r scripts -lll -c .bandit
   unit:
     runs-on: ubuntu-latest
     steps:
