@@ -8,12 +8,13 @@ Organizes datasets by name with metadata and sample data.
 
 import argparse
 import json
-import yaml
-from pathlib import Path
-from typing import Dict, List, Any, Optional
-from datasets import load_dataset
-from datetime import datetime
 import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import yaml
+from datasets import load_dataset
 
 
 def load_datasets_config(config_path: Path) -> Dict[str, Any]:
@@ -46,13 +47,13 @@ def collect_dataset_metadata(dataset, dataset_name: str, dataset_config: Dict[st
         'preprocessing': dataset_config.get('preprocessing', {}),
         'description': dataset_config.get('description', ''),
     }
-    
+
     for split_name, split_data in dataset.items():
         metadata['splits'][split_name] = {
             'num_examples': len(split_data),
             'features': list(split_data.features.keys()),
         }
-    
+
     return metadata
 
 
@@ -68,7 +69,7 @@ def save_dataset_samples(dataset, output_dir: Path) -> Path:
     """Save sample data to JSON file"""
     sample_file = output_dir / 'samples.json'
     samples = {}
-    
+
     for split_name, split_data in dataset.items():
         num_samples = min(5, len(split_data))
         if num_samples > 0:
@@ -76,10 +77,10 @@ def save_dataset_samples(dataset, output_dir: Path) -> Path:
                 {k: str(v) for k, v in example.items()}
                 for example in split_data.select(range(num_samples))
             ]
-    
+
     with open(sample_file, 'w') as f:
         json.dump(samples, f, indent=2)
-    
+
     return sample_file
 
 
@@ -100,40 +101,40 @@ def download_dataset(
 
     ds_name = dataset_config['name']
     subset = dataset_config.get('subset')
-    
+
     print(f"  HuggingFace name: {ds_name}")
     if subset:
         print(f"  Subset: {subset}")
-    
+
     # Load dataset
     dataset = load_dataset_from_hf(ds_name, subset, cache_dir)
     if dataset is None:
         return None
-    
+
     # Collect metadata
     metadata = collect_dataset_metadata(dataset, dataset_name, dataset_config)
-    
+
     # Create output directory
     dataset_output_dir = output_dir / dataset_name
     dataset_output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Save metadata
     metadata_file = save_dataset_metadata(metadata, dataset_output_dir)
     print(f"  Metadata saved: {metadata_file}")
-    
+
     # Save sample data
     sample_file = save_dataset_samples(dataset, dataset_output_dir)
     print(f"  Samples saved: {sample_file}")
-    
+
     total_examples = sum(
         split_info['num_examples']
         for split_info in metadata['splits'].values()
     )
-    
-    print(f"  ✓ Downloaded successfully")
+
+    print("  ✓ Downloaded successfully")
     print(f"  Splits: {list(metadata['splits'].keys())}")
     print(f"  Total examples: {total_examples:,}")
-    
+
     return metadata
 
 
@@ -179,7 +180,7 @@ def download_all_datasets(datasets_config: Dict[str, Any], cache_dir: Path, outp
     print(f"Failed: {len(failed)}")
 
     if failed:
-        print(f"\nFailed datasets:")
+        print("\nFailed datasets:")
         for name in failed:
             print(f"  - {name}")
 

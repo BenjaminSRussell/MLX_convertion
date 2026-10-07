@@ -19,10 +19,11 @@ def convert_model(config):
     Args:
         config (dict): Single model configuration (must include name/hf_name + type).
     """
-    import mlx.core as mx
-    from transformers import AutoTokenizer, AutoModelForCausalLM
-    import torch
     from concurrent.futures import ThreadPoolExecutor
+
+    import mlx.core as mx
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
     model_name = config["name"]
     model_type = config["type"]

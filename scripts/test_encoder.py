@@ -7,11 +7,11 @@ This script loads and tests MLX encoder models with TRUE INT8 quantization.
 
 import argparse
 import json
-import numpy as np
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict
 
 import mlx.core as mx
+import numpy as np
 from transformers import AutoTokenizer
 
 
@@ -150,7 +150,7 @@ def test_model_loading(model_path: str, verbose: bool = False):
     try:
         weights, config, tokenizer = load_mlx_model(model_path)
 
-        print(f"Successfully loaded model")
+        print("Successfully loaded model")
         print(f"  - Config: {config.get('model_type', 'unknown')} ({config.get('_name_or_path', 'N/A')})")
         print(f"  - Weights: {len(weights)} parameters")
         print(f"  - Tokenizer: {len(tokenizer)} tokens")
@@ -200,7 +200,7 @@ def test_tokenization(model_path: str, text: str = "This is a test sentence."):
         # Tokenize
         inputs = tokenizer(text, return_tensors="np", padding=True, truncation=True)
 
-        print(f"Tokenization successful")
+        print("Tokenization successful")
         print(f"  - Input IDs shape: {inputs['input_ids'].shape}")
         print(f"  - Tokens: {tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])[:10]}...")
 
@@ -217,7 +217,7 @@ def test_embedding_extraction(model_path: str, text: str = "This is a test sente
     """
     Test basic embedding extraction from the dequantized model.
     """
-    print(f"\nTesting embedding extraction (with dequantization)")
+    print("\nTesting embedding extraction (with dequantization)")
 
     model_path = Path(model_path)
 

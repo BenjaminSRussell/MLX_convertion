@@ -1,25 +1,22 @@
 import argparse
-import yaml
+import glob
 import json
+import logging
 import os
-import time
 import tempfile
+import time
+from pathlib import Path
+
+import mlx.core as mx
 import numpy as np
 import psutil
-from pathlib import Path
-from datasets import load_dataset
-from sklearn.metrics import accuracy_score
 import torch
-from transformers import (
-    pipeline,
-    AutoModelForSequenceClassification,
-    AutoTokenizer
-)
-import mlx.core as mx
-import mlx.nn as nn
+import yaml
+from datasets import load_dataset
 from mlx_lm import load
-import logging
-import glob
+from sklearn.metrics import accuracy_score
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+
 
 def setup_logging():
     """sets up logging for testing"""
@@ -84,7 +81,7 @@ class Bit8ModelTester:
         self.results_dir.mkdir(parents=True, exist_ok=True)
         self.comparisons_dir = Path(comparisons_dir) if comparisons_dir else Path(temp_dir) / 'mlx_conversion' / 'comparisons'
         self.comparisons_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def calculate_performance_metrics(self, preds, refs, latencies, total_tokens, dur, model_size_mb, mem_samples):
         """calculates the 6 main performance metrics"""
         # 1. Accuracy
@@ -148,20 +145,20 @@ class Bit8ModelTester:
                 load_params['name'] = config['subset']
 
             dataset = load_dataset(**load_params)
-            
+
             # Take smaller sample for faster testing
             sample_size = min(max_samples, len(dataset))
             if sample_size < len(dataset):
                 indices = np.random.choice(len(dataset), sample_size, replace=False)
                 dataset = dataset.select(indices)
-            
+
             logger.info(f"loaded {len(dataset)} examples from {dataset_name}")
             return dataset
 
         except Exception as e:
             logger.error(f"couldn't load dataset {dataset_name}: {str(e)}")
             raise
-    
+
     def test_pytorch_baseline(self, model_name, task, dataset_name, dataset):
         """tests original PyTorch model as baseline"""
         logger.info(f"testing PyTorch baseline {model_name} on {dataset_name}...")
@@ -173,11 +170,11 @@ class Bit8ModelTester:
         total_tokens = 0  # Track total tokens processed
         memory_samples = []  # Track memory usage
         process = psutil.Process()
-        
+
         if task == "zero-shot-classification":
             # Use pipeline but with batch processing for speed
             classifier = pipeline("zero-shot-classification", model=model_name, device=0 if torch.cuda.is_available() else -1)
-            
+
             # Get appropriate labels
             if dataset_name == 'mnli':
                 labels = ["entailment", "neutral", "contradiction"]
@@ -185,7 +182,7 @@ class Bit8ModelTester:
                 labels = ["positive", "negative", "neutral"]
             else:
                 labels = ["positive", "negative"]
-            
+
             # Process in batches
             batch_size = 8
             for i in range(0, len(dataset), batch_size):
@@ -216,7 +213,7 @@ class Bit8ModelTester:
 
                     # Sample memory usage
                     memory_samples.append(process.memory_info().rss / 1024 / 1024)  # MB
-        
+
         else:
             # Classification task
             tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -254,7 +251,7 @@ class Bit8ModelTester:
 
                 # Sample memory usage
                 memory_samples.append(process.memory_info().rss / 1024 / 1024)  # MB
-        
+
         duration = time.time() - start_time
 
         # Calculate model size (rough estimate for PyTorch models)
@@ -282,7 +279,7 @@ class Bit8ModelTester:
             'predictions': predictions[:100],  # Save first 100 for debugging
             'references': references[:100]
         }
-    
+
     def test_mlx_8bit_model(self, model_path, model_config, dataset_name, dataset):
         """tests 8-bit MLX model"""
         logger.info(f"testing MLX 8-bit model at {model_path} on {dataset_name}...")
@@ -294,13 +291,13 @@ class Bit8ModelTester:
         total_tokens = 0  # Track total tokens processed
         memory_samples = []  # Track memory usage
         process = psutil.Process()
-        
+
         # Load MLX model
         model, tokenizer = load(model_path)
-        
+
         task = model_config['task']
         quant_config = model_config['quantization']
-        
+
         if task == "zero-shot-classification":
             # Simplified zero-shot for MLX (placeholder - implement proper version)
             logger.warning("MLX zero-shot classification needs custom implementation")
@@ -314,7 +311,7 @@ class Bit8ModelTester:
                 'inference_time': duration,
                 'sample_size': len(dataset)
             }
-        
+
         else:
             # Classification with MLX
             batch_size = 32  # MLX can handle larger batches on Apple Silicon
@@ -350,7 +347,7 @@ class Bit8ModelTester:
 
                 # Sample memory usage
                 memory_samples.append(process.memory_info().rss / 1024 / 1024)  # MB
-        
+
         duration = time.time() - start_time
 
         # Get actual model size from converted files
@@ -375,7 +372,7 @@ class Bit8ModelTester:
             'predictions': predictions[:100],
             'references': references[:100]
         }
-    
+
     def compare_models(self, model_name, dataset_name):
         """compares PyTorch baseline vs 8-bit MLX"""
         logger.info(f"comparing {model_name} (8-bit) on {dataset_name}...")
@@ -416,7 +413,7 @@ class Bit8ModelTester:
         passed_acc_gate = acc_drop <= quant_cfg['max_accuracy_drop']
         passed_speed_gate = speedup >= 1.2  # At least 20% faster
         passed_size_gate = mlx_results['model_size_mb'] <= quant_cfg['target_size_mb'] * 1.1
-        
+
         comp = {
             'model_name': model_name,
             'dataset_name': dataset_name,
@@ -438,7 +435,7 @@ class Bit8ModelTester:
         comp_file = self.comparisons_dir / f"{model_name}_q8_{dataset_name}_comparison.json"
         with open(comp_file, 'w') as f:
             json.dump(comp, f, indent=2)
-        
+
         logger.info(f"comparison saved to {comp_file}")
 
         # Log quality gate results
@@ -452,55 +449,55 @@ class Bit8ModelTester:
                     logger.warning(f"  {status} {gate.replace('_passed', '')}")
 
         return comp
-    
+
     def test_all_models(self):
         """tests all 8-bit models against benchmarks"""
         logger.info("starting comprehensive 8-bit testing...")
-        
+
         all_results = {}
-        
+
         for model_config in self.models_config['models']:
             model_name = model_config['name']
             all_results[model_name] = {}
-            
+
             logger.info(f"\n{'='*60}")
             logger.info(f"testing model: {model_name}")
             logger.info(f"{'='*60}")
 
             for dataset_name in model_config['benchmarks']:
                 logger.info(f"testing on {dataset_name}...")
-                
+
                 try:
                     comparison = self.compare_models(model_name, dataset_name)
                     if comparison:
                         all_results[model_name][dataset_name] = comparison
-                        
+
                         # Save intermediate results
                         with open(self.results_dir / f"{model_name}_8bit_results.json", 'w') as f:
                             json.dump(all_results, f, indent=2)
-                
+
                 except Exception as e:
                     logger.error(f"oops, testing {model_name} on {dataset_name} failed: {str(e)}")
                     all_results[model_name][dataset_name] = {
                         'error': str(e),
                         'failed': True
                     }
-                
+
                 # Small delay between tests
                 time.sleep(1)
-        
+
         # Save final summary
         summary_file = self.results_dir / '8bit_testing_summary.json'
         with open(summary_file, 'w') as f:
             json.dump(all_results, f, indent=2)
-        
+
         logger.info(f"summary saved to {summary_file}")
 
         # Print summary
         logger.info(f"\n{'='*60}")
         logger.info("testing summary")
         logger.info(f"{'='*60}")
-        
+
         for model_name, datasets in all_results.items():
             logger.info(f"\nModel: {model_name}")
             for dataset_name, result in datasets.items():
@@ -510,7 +507,7 @@ class Bit8ModelTester:
                     logger.info(f"  {dataset_name}: {status}")
                     logger.info(f"    Accuracy drop: {result['accuracy_drop']:.4f} (max allowed: {model_config['quantization']['max_accuracy_drop']:.4f})")
                     logger.info(f"    Speedup: {result['speedup']:.2f}x")
-        
+
         return all_results
 
 def main():
@@ -521,11 +518,11 @@ def main():
     parser.add_argument('--dataset', help='Specific dataset to test on')
     parser.add_argument('--results-dir', default='results/test_results', help='Output directory for test results')
     parser.add_argument('--comparisons-dir', default='results/comparisons', help='Output directory for comparison results')
-    
+
     args = parser.parse_args()
-    
+
     tester = Bit8ModelTester(args.models, args.datasets, args.results_dir, args.comparisons_dir)
-    
+
     if args.model and args.dataset:
         # Test specific model/dataset
         comparison = tester.compare_models(args.model, args.dataset)
@@ -533,7 +530,7 @@ def main():
             print(json.dumps(comparison, indent=2))
             return 0 if comparison['quality_gates']['all_passed'] else 1
         return 1
-    
+
     else:
         # Test all models
         results = tester.test_all_models()

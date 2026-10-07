@@ -1,0 +1,38 @@
+name: CI Linux
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff + bandit
+        run: pip install ruff bandit
+      - name: Ruff (scripts + verification)
+        run: ruff check scripts
+      - name: Bandit high-severity gate
+        run: bandit -r scripts -ll -c .bandit
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test deps
+        run: pip install pytest numpy scipy scikit-learn
+      - name: Pytest (non-MLX units)
+        run: |
+          if [ -d tests ]; then
+            PYTHONPATH=. pytest tests -q --ignore=tests/test_mlx 2>/dev/null || PYTHONPATH=. pytest tests -q
+          else
+            echo "No tests/ yet"
+          fi
