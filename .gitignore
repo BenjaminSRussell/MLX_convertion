@@ -52,3 +52,7 @@ datasets/
 mlx_convertion.db
 artifacts/
 data/
+
+# Committed CI eval fixtures (#9)
+!tests/fixtures/datasets/
+!tests/fixtures/datasets/*.jsonl
