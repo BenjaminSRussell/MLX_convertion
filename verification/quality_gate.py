@@ -262,6 +262,14 @@ class QualityGateEnforcer:
         report.append("=" * 80)
         return "\n".join(report)
 
+    def record_to_registry(self, result: QualityGateResult, registry=None, strategy: Optional[str] = None,
+                           bits: Optional[int] = None, run_id: Optional[int] = None) -> int:
+        """Persist this gate result (pass or fail) in the SQLite run registry (#6)."""
+        from utils.run_registry import RunRegistry
+
+        registry = registry or RunRegistry()
+        return registry.record_gate_result(result, strategy=strategy, bits=bits, run_id=run_id)
+
     def save_result(self, result: QualityGateResult, output_path: Path):
         """
         Save quality gate result to JSON.
